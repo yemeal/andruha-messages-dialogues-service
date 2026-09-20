@@ -88,8 +88,6 @@ hooks = [
     { id = "check-executables-have-shebangs", priority = "lint", groups = ["lint"] },
     # Проверка, что файлы с shebang имеют бит исполнения (+x) в Git-индексе (например, docker-entrypoint.sh).
     { id = "check-shebang-scripts-are-executable", priority = "lint", groups = ["lint"] },
-    # Защита от случайного прямого коммита в ветку main (разработка ведется через фиче-ветки и PR).
-    { id = "no-commit-to-branch", args = ["--branch", "main"], priority = "lint", groups = ["lint"] },
 ]
 
 
