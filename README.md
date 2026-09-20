@@ -2,17 +2,30 @@
 
 ## Purpose and current status
 
-This repository is the skeleton for the Andruha Messenger Messages and Dialogues Service. It contains package boundaries and operational HTTP infrastructure only. No messenger business behavior is implemented.
+This repository contains the first domain increment for direct dialogues and
+operational HTTP infrastructure. `DirectParticipants` and `DirectDialog` enforce
+local domain rules; application use cases, persistence, and business endpoints
+are not connected yet.
+
+## Domain design
+
+- [Domain vocabulary](CONTEXT.md)
+- [DDD and Hexagonal Architecture model proposal, 2026-09-18](docs/domain-model-design-2026-09-18.md)
+- [First domain iteration: walkthrough and review points](docs/domain-iteration-1-walkthrough-2026-09-19.md)
+
+The direct-dialogue domain increment is implemented and unit-tested. Message and
+receipt models remain design proposals for subsequent iterations.
 
 ## Responsibility and explicit non-responsibilities
 
-Own durable dialogues, messages, and receipt state in future iterations.
+Own dialogue membership rules now; add durable dialogues, messages, and receipt
+state in subsequent iterations.
 
 It does not own credentials, public profiles, media object bytes, connection routing, presence, typing state, or online delivery.
 
 ## Hexagonal/DDD layer map
 
-- `domain`: framework-free future business model.
+- `domain`: immutable direct-dialogue models and domain errors, using Pydantic for validation.
 - `application`: future use cases and owned ports; depends only on domain.
 - `infrastructure`: future adapters implementing application ports.
 - `entrypoints`: transport translation that will call application services.
