@@ -1,0 +1,25 @@
+default_install_hook_types = ["pre-commit"]
+
+[priorities]
+fix = 0
+lint = 10
+typecheck = 20
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace", priority = "fix" },
+  { id = "end-of-file-fixer", priority = "fix" },
+  { id = "check-yaml", priority = "lint" },
+  { id = "check-toml", priority = "lint" },
+  { id = "check-added-large-files", priority = "lint" },
+  { id = "check-merge-conflict", priority = "lint" },
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+  { id = "ruff-check", name = "ruff check", entry = "uv run ruff check --force-exclude", language = "system", types = ["python"], priority = "lint" },
+  { id = "ruff-format", name = "ruff format", entry = "uv run ruff format --check --force-exclude", language = "system", types = ["python"], priority = "lint" },
+  { id = "ty-check", name = "ty check", entry = "uv run ty check --error-on-warning", language = "system", pass_filenames = false, priority = "typecheck" },
+]

@@ -41,22 +41,22 @@ No business API or transport contract is available yet.
 
 ## Local build and run status
 
-Runtime and test dependencies are declared and locked for Python 3.14. The
+Runtime and test dependencies are declared and locked for Python 3.14 with `uv`. The
 service can be verified from this repository with:
 
 ```powershell
-poetry sync --with dev --no-root
-poetry run ruff check .
-poetry run ruff format --check .
-poetry run ty check --error-on-warning
-poetry run pytest
+uv sync
+uv run prek install
+uv run prek run --all-files
+uv run pytest
 docker build --target runtime --tag andruha/messages-dialogues-service:local .
 ```
 
-`.github/workflows/ci.yml` runs lint, ty type checking, unit and integration
-tests, branch coverage >= 80%, runtime dependency audit, secret scanning, and a
-Docker smoke test. `.github/workflows/release.yml` publishes a verified image
-to GHCR only for a version tag. Business APIs and persistence remain deferred.
+`.github/workflows/ci.yml` runs prek quality hooks, ty type checking, unit and
+integration tests, branch coverage >= 80%, runtime dependency audit, secret
+scanning, and a Docker smoke test. `.github/workflows/release.yml` publishes a
+verified image to GHCR only for a version tag. Business APIs and persistence
+remain deferred.
 
 ## Canonical project material
 
