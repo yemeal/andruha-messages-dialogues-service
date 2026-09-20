@@ -76,7 +76,7 @@ class MutableEntity(Entity):
     Пример реализации изменяемой сущности:
     ```python
         class DialogDraft(MutableEntity):
-            draft_text: Annotated[str, Field(max_length=4096)] = ""
+            draft_text: Annotated[str, Field(default="", max_length=4096)]
 
             def update_draft(self, text: str, now: datetime) -> bool:
                 # 1. Если text == self.draft_text: _apply_changes сам вернёт False (no-op),
@@ -197,7 +197,7 @@ class VersionedMutableEntity(MutableEntity):
     ```python
         class ChatSettings(VersionedMutableEntity):
             title: Annotated[str, Field(min_length=1, max_length=100)]
-            is_muted: bool = False
+            is_muted: Annotated[bool, Field(default=False, description="Отключены ли уведомления чата.")]
 
             def rename(self, new_title: str, now: datetime) -> bool:
                 # 1. Если new_title == self.title: _apply_changes сам вернёт False
