@@ -59,4 +59,7 @@ class DirectDialog(Entity):
         return self.participants.as_set
 
     def peer_of(self, user_id: UUID) -> UUID:
+        """
+        Возвращает собеседника диалога либо поднимает `NotDialogParticipantError`.
+        """
         return self.participants.peer_of(user_id)
