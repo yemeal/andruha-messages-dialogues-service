@@ -5,7 +5,7 @@ from uuid import UUID, uuid7
 from pydantic import Field, model_validator
 
 from app.domain.base import VersionedMutableEntity
-from app.domain.clock import utc_now
+from app.domain.clock import ensure_utc
 from app.domain.exceptions.receipts import ReadCheckpointExceedsDeliveredError
 from app.domain.value_objects.message_checkpoint import MessageCheckpoint
 from app.domain.value_objects.message_position import MessagePosition
@@ -66,7 +66,7 @@ class ReceiptWatermark(VersionedMutableEntity):
         """
         Создаёт начальное пустое состояние ватермарки.
         """
-        instant = now if now is not None else utc_now()
+        instant = ensure_utc(now)
         return cls(
             id=watermark_id if watermark_id is not None else uuid7(),
             dialog_id=dialog_id,

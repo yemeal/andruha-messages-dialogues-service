@@ -1,12 +1,11 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from functools import total_ordering
 from typing import Annotated, Self
 
 from pydantic import Field, field_validator
 
 from app.domain.base import DomainModel
-from app.domain.clock import utc_now
-from app.domain.exceptions.base import InvalidDomainTimestampError
+from app.domain.clock import ensure_utc
 from app.domain.value_objects.message_position import MessagePosition
 
 
@@ -28,9 +27,7 @@ class MessageCheckpoint(DomainModel):
     @field_validator("timestamp")
     @classmethod
     def _normalize_timestamp(cls, value: datetime) -> datetime:
-        if value.utcoffset() is None:
-            raise InvalidDomainTimestampError()
-        return value.astimezone(UTC)
+        return ensure_utc(value)
 
     @classmethod
     def create(
@@ -45,7 +42,7 @@ class MessageCheckpoint(DomainModel):
         pos = MessagePosition(value=position) if isinstance(position, int) else position
         return cls(
             position=pos,
-            timestamp=timestamp if timestamp is not None else utc_now(),
+            timestamp=ensure_utc(timestamp),
         )
 
     def __lt__(self, other: object) -> bool:

@@ -5,7 +5,7 @@ from uuid import UUID, uuid7
 from pydantic import Field
 
 from app.domain.base import Entity
-from app.domain.clock import utc_now
+from app.domain.clock import ensure_utc
 from app.domain.value_objects.direct_participants import DirectParticipants
 
 
@@ -35,7 +35,7 @@ class DirectDialog(Entity):
         return cls(
             id=dialog_id if dialog_id is not None else uuid7(),
             participants=participants,
-            created_at=now if now is not None else utc_now(),
+            created_at=ensure_utc(now),
         )
 
     def __contains__(self, user_id: UUID) -> bool:

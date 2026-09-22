@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated, Any, Self
 from uuid import UUID
 
@@ -10,6 +10,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.domain.clock import ensure_utc
 from app.domain.exceptions.base import InvalidDomainTimestampError
 
 
@@ -52,9 +53,7 @@ class Entity(DomainModel):
     @field_validator("created_at")
     @classmethod
     def _normalize_created_at(cls, value: datetime) -> datetime:
-        if value.utcoffset() is None:
-            raise InvalidDomainTimestampError()
-        return value.astimezone(UTC)
+        return ensure_utc(value)
 
 
 class MutableEntity(Entity):
@@ -107,9 +106,7 @@ class MutableEntity(Entity):
     def _normalize_updated_at(cls, value: datetime | None) -> datetime | None:
         if value is None:
             return None
-        if value.utcoffset() is None:
-            raise InvalidDomainTimestampError()
-        return value.astimezone(UTC)
+        return ensure_utc(value)
 
     @model_validator(mode="after")
     def _validate_timestamps(self) -> Self:
