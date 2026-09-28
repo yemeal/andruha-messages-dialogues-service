@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+from copy import deepcopy
 from datetime import datetime
 from typing import Annotated, Any, Self
 from uuid import UUID
@@ -16,7 +18,7 @@ from app.domain.exceptions.base import InvalidDomainTimestampError
 
 class DomainModel(BaseModel):
     """
-    Неизменяемое, проверенное состояние предметной области.
+    Проверенное состояние предметной области с запретом прямого изменения полей.
     """
 
     model_config = ConfigDict(
@@ -25,11 +27,28 @@ class DomainModel(BaseModel):
         from_attributes=True,
         validate_assignment=True,
         validate_default=True,
+        revalidate_instances="always",
         arbitrary_types_allowed=False,
         populate_by_name=True,
         ser_json_bytes="base64",
         ser_json_timedelta="iso8601",
     )
+
+    def model_copy(
+        self, *, update: Mapping[str, Any] | None = None, deep: bool = False
+    ) -> Self:
+        """Копия проходит ту же валидацию, что создание и восстановление."""
+        values = self.model_dump(round_trip=True)
+        if update is not None:
+            values.update(update)
+        return type(self).model_validate(deepcopy(values) if deep else values)
+
+    @classmethod
+    def model_construct(
+        cls, _fields_set: set[str] | None = None, **values: Any
+    ) -> Self:
+        """В домене нет непроверенного конструирования; поля определяет валидация."""
+        return cls.model_validate(values)
 
 
 class Entity(DomainModel):
@@ -92,6 +111,15 @@ class MutableEntity(Entity):
     - При любой ошибке валидации инвариантов или времени состояние сущности
       остаётся в исходном неизменном виде (атомарный откат).
     """
+
+    __hash__ = None
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        super().__pydantic_init_subclass__(**kwargs)
+        # Pydantic генерирует hash заново для frozen-подклассов.
+        # Изменяемые агрегаты сохраняют frozen-защиту полей, но не являются ключами.
+        cls.__hash__ = None
 
     updated_at: Annotated[
         datetime | None,
@@ -223,6 +251,7 @@ class VersionedMutableEntity(MutableEntity):
         Field(
             default=1,
             ge=1,
+            strict=True,
             description="Номер версии сущности (изменяется вместе с updated_at)",
         ),
     ]
