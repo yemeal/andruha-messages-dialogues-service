@@ -1,0 +1,80 @@
+from datetime import datetime
+from typing import Annotated, Self
+from uuid import UUID, uuid7
+
+from pydantic import Field
+
+from app.domain.base import Entity
+from app.domain.clock import ensure_utc
+from app.domain.value_objects.direct_participants import DirectParticipants
+
+
+class DirectDialog(Entity):
+    """
+    Неизменяемый личный диалог двух участников.
+    """
+
+    participants: Annotated[
+        DirectParticipants,
+        Field(
+            description="Каноническая пара участников, независимая от инициатора диалога."
+        ),
+    ]
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        participants: DirectParticipants,
+        dialog_id: UUID | None = None,
+        now: datetime | None = None,
+    ) -> Self:
+        """
+        Создаёт кандидата; уникальность пары обеспечивает репозиторий.
+        """
+        return cls(
+            id=dialog_id if dialog_id is not None else uuid7(),
+            participants=participants,
+            created_at=ensure_utc(now),
+        )
+
+    def __contains__(self, user_id: UUID) -> bool:
+        """
+        Проверяет участие пользователя в диалоге через оператор `in`.
+        """
+        return user_id in self.participants
+
+    @property
+    def as_tuple(self) -> tuple[UUID, UUID]:
+        """
+        Возвращает каноническую пару участников диалога в виде кортежа.
+        """
+        return self.participants.as_tuple
+
+    @property
+    def as_set(self) -> frozenset[UUID]:
+        """
+        Возвращает участников диалога в виде неизменяемого множества (frozenset).
+        """
+        return self.participants.as_set
+
+    def peer_of(self, user_id: UUID) -> UUID:
+        """
+        Возвращает собеседника диалога либо поднимает `NotDialogParticipantError`.
+        """
+        return self.participants.peer_of(user_id)
+
+    def require_can_send(self, user_id: UUID) -> None:
+        """Отправлять сообщения может только участник неизменной пары."""
+        self.require_can_read(user_id)
+
+    def require_can_read(self, user_id: UUID) -> None:
+        self.participants.peer_of(user_id)
+
+    @property
+    def supports_receipts(self) -> bool:
+        return True
+
+    def require_message_access(self, *, sender_id: UUID, reader_id: UUID) -> None:
+        self.require_can_read(reader_id)
+        self.require_can_read(sender_id)
