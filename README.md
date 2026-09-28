@@ -2,30 +2,45 @@
 
 ## Purpose and current status
 
-This repository contains the first domain increment for direct dialogues and
-operational HTTP infrastructure. `DirectParticipants` and `DirectDialog` enforce
-local domain rules; application use cases, persistence, and business endpoints
-are not connected yet.
+This repository contains domain models for direct, group, and saved dialogues,
+messages with text and attachment object IDs, receipts, and operational HTTP
+infrastructure. The domain enforces local invariants; application use cases,
+persistence, and business endpoints are not connected yet.
 
 ## Domain design
 
 - [Domain vocabulary](CONTEXT.md)
 - [DDD and Hexagonal Architecture model proposal, 2026-09-18](docs/domain-model-design-2026-09-18.md)
 - [First domain iteration: walkthrough and review points](docs/domain-iteration-1-walkthrough-2026-09-19.md)
+- [Domain hardening: Message, groups, media, SOLID, and verification](docs/domain-hardening-walkthrough-2026-09-29.md)
 
-The direct-dialogue domain increment is implemented and unit-tested. Message and
-receipt models remain design proposals for subsequent iterations.
+The domain includes dialogue aggregates, messages with text and/or attachment
+object IDs, sender-scoped send keys, dialog-scoped message positions,
+message checkpoints, receipt watermarks, and posting/delivery policies.
+Message contains no dialogue type or recipient field. Policies depend on narrow
+dialogue protocols. Groups support up to 1000 members, full history for current
+members, membership changes, ownership transfer, renaming, and avatar references.
+Attachments and avatars use ObjectId values serialized as UUIDs; S3 keys and
+expiring download URLs are not part of the domain state.
+The domain does not verify attachment ownership or readiness; an application
+scenario must validate object IDs with Object Storage before acceptance.
+Attachment size, media type, checksum, and S3 object keys belong to Object Storage.
+Domain limits are collected in [`src/app/domain/limits.py`](src/app/domain/limits.py).
+Runtime defaults are at the top of `src/app/core/settings.py`; the request ID
+length default is at the top of its HTTP policy file.
+Message acceptance and receipt ACKs are not durable until application and storage
+adapters are implemented.
 
 ## Responsibility and explicit non-responsibilities
 
-Own dialogue membership rules now; add durable dialogues, messages, and receipt
-state in subsequent iterations.
+Own local dialogue, message, and receipt rules now; add durable storage and
+business scenarios in subsequent iterations.
 
 It does not own credentials, public profiles, media object bytes, connection routing, presence, typing state, or online delivery.
 
 ## Hexagonal/DDD layer map
 
-- `domain`: immutable direct-dialogue models and domain errors, using Pydantic for validation.
+- `domain`: dialogue, message, and receipt models, value objects, policies, and domain errors, using Pydantic for validation.
 - `application`: future use cases and owned ports; depends only on domain.
 - `infrastructure`: future adapters implementing application ports.
 - `entrypoints`: transport translation that will call application services.

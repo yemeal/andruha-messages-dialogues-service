@@ -1,13 +1,15 @@
 # Доменная модель Messages and Dialogues
 
-Дата проекта: 18 сентября 2026 года. Первый доменный инкремент реализован
-19 сентября; последующие модели остаются проектом.
+Дата исходного проекта: 18 сентября 2026 года. Первый доменный инкремент
+реализован 19 сентября; текущий доменный код уже включает сообщения, receipts,
+групповые и сохранённые диалоги. Разделы об application, Cassandra и брокере
+по-прежнему описывают план, а не подключённую интеграцию.
 [Walkthrough первой итерации и результаты проверок](domain-iteration-1-walkthrough-2026-09-19.md).
+[Актуальный walkthrough: независимый Message, группы и ObjectId](domain-hardening-walkthrough-2026-09-29.md).
 
-Предлагаются три независимых агрегата: `DirectDialog`, `Message` и
-`ReceiptWatermark`. Первый доменный инкремент содержит только личный диалог и
-пару участников. Остальные модели описаны, чтобы проверить границы заранее;
-их код добавляется вместе с соответствующим продуктовым этапом.
+Исходный проект выделил `DirectDialog`, `Message` и `ReceiptWatermark` как
+независимые агрегаты. В следующих доменных итерациях добавлены `GroupDialog`
+и `SavedDialog`. Продуктовые сценарии для этих моделей ещё не подключены.
 
 ## 1. Основания и границы работы
 
@@ -28,9 +30,10 @@
 Проект дополняет [словарь](../CONTEXT.md). Первая итерация исходников реализует
 раздел 4; межсервисные schemas остаются прежними.
 
-Состав MVP: диалоги 1:1, неизменяемые сообщения, delivery/read watermarks.
-Группы, роли администратора диалога, выход участника, edit/delete сообщений,
-реакции, блокировки собеседников и архивирование сейчас не моделируются.
+Первый продуктовый рубеж: диалоги 1:1, неизменяемые текстовые сообщения и
+delivery/read watermarks. Текущий домен дополнительно моделирует групповые и
+сохранённые диалоги и ссылки на вложения. Edit/delete сообщений, реакции,
+блокировки собеседников и архивирование сейчас не моделируются.
 
 ## 2. Что берём из User Profile Service
 
@@ -49,14 +52,17 @@
 
 `DirectDialog` и `Message` неизменяемы в MVP: им достаточно идентичности,
 времени создания и проверенного содержимого. `version` и `updated_at` появляются
-у изменяемого `ReceiptWatermark`; его естественный ключ составной, поэтому
-случайный дополнительный `id` ему не нужен.
+у изменяемых `ReceiptWatermark` и `GroupDialog`. Текущий `ReceiptWatermark`
+также наследует `id`; его естественный ключ `(dialog_id, user_id)` должен
+оставаться уникальным независимо от этого ID в будущем репозитории.
 
-Все вложенные значения также неизменяемы. Для коллекций используются tuple,
-а не изменяемые list/set. Конструирование и восстановление проверяют одинаковые
-локальные инварианты; `model_construct` и непроверенный `model_copy(update=...)`
-не являются путями восстановления или изменения. Фабрики получают ID и время
-явно: повторная гидратация не создаёт новую идентичность.
+Все вложенные значения также неизменяемы. Для коллекций используются tuple
+и frozenset. Конструирование и восстановление проверяют одинаковые локальные
+инварианты; `model_construct` и `model_copy(update=...)` переопределены с полной
+валидацией, вложенные экземпляры перепроверяются. Эти операции создают снимок,
+но не заменяют бизнес-метод с проверкой прав. Изменяемые агрегаты не хешируются.
+Фабрики принимают ID и время, при отсутствии генерируют их; гидратация требует
+сохранённых ID и времени и не создаёт новую идентичность.
 
 Домен не содержит JSON aliases, HTTP-кодов, Kafka envelopes, SDK типов,
 SQL/CQL-моделей, настроек `app.core`, логирования пользовательского содержимого
@@ -86,7 +92,6 @@ classDiagram
         UUID id
         UUID dialog_id
         UUID sender_id
-        UUID recipient_id
         ClientMessageId client_message_id
         MessageContent content
         MessagePosition position
@@ -94,19 +99,49 @@ classDiagram
     }
     class ReceiptWatermark {
         UUID dialog_id
-        UUID recipient_user_id
+        UUID user_id
         MessageCheckpoint delivered_through
         MessageCheckpoint read_through
         int version
-        advance(actor_id, kind, through, now) bool
+        advance_delivered(actor_id, dialog, through, now) bool
+        advance_read(actor_id, dialog, through, now) bool
     }
+    class PostingDialog {
+        <<interface>>
+        require_can_send(user_id)
+    }
+    class ReceiptDialog {
+        <<interface>>
+        bool supports_receipts
+        require_message_access(sender_id, reader_id)
+    }
+    class MessagePostingPolicy
     DirectDialog *-- DirectParticipants
-    Message ..> DirectDialog : проверяет участие при создании
+    DirectDialog ..|> PostingDialog
+    DirectDialog ..|> ReceiptDialog
+    MessagePostingPolicy ..> PostingDialog : проверяет право отправки
+    MessagePostingPolicy ..> Message : создаёт кандидата
     ReceiptWatermark ..> Message : проверяет входящее сообщение
+    ReceiptWatermark ..> ReceiptDialog : проверяет доступ
 ```
 
 Пунктир обозначает использование фактов другого агрегата. Агрегаты хранят ссылки
 по ID; они не включают друг друга в собственное изменяемое состояние.
+Для `GroupDialog` любой текущий участник может добавить или удалить участника
+и изменить название или аватар. Передать владение может только текущий владелец; он
+всегда остаётся участником. Методы получают `actor_id` и проверяют его до
+изменения, включая no-op.
+
+Группа содержит от 1 до 1000 участников, включая владельца. Новому участнику
+доступна вся история; после выхода или исключения доступ прекращается.
+Сообщения ушедших авторов остаются доступными текущим участникам.
+Проверка по загруженному снимку группы не закрывает гонку с исключением:
+будущий протокол записи должен сериализовать изменение доступа и принятие сообщений/ACK.
+
+`SavedDialog` принадлежит одному владельцу и моделирует «Избранное».
+Сохранённые сообщения имеют `SENT`; второй получатель и ACK отсутствуют.
+`PostingDialog` и `ReceiptDialog` — узкие интерфейсы доменного поведения;
+новому типу диалога не требуется менять `Message`.
 
 В `DirectDialog` нет списка всех сообщений. Добавление сообщения не меняет
 диалог. Это даёт ограниченный размер агрегата и независимые записи сообщений.
@@ -184,7 +219,7 @@ UUIDv7 для новых business IDs — политика серверного 
 факт на момент проверки, а не вечная гарантия существования аккаунта.
 Новые правила удаления/блокировки аккаунтов потребуют отдельной политики.
 
-## 5. Следующий инкремент: сообщение
+## 5. Сообщение и вложения
 
 ### Value objects
 
@@ -192,54 +227,62 @@ UUIDv7 для новых business IDs — политика серверного 
 |---|---|
 | `ClientMessageId` | Неизменяемый UUIDv7 одной клиентской отправки |
 | `MessageSendKey` | `(sender_id, client_message_id)`; диалог не входит в область уникальности |
-| `MessageText` | Unicode NFC; `CRLF` и `CR` преобразуются в `LF`; 1–4096 code points после нормализации |
-| `MessageContent` | В текстовом инкременте содержит обязательный `MessageText`; расширение вложениями описано ниже |
+| `MessageText` | Unicode NFC; `CRLF` и `CR` преобразуются в `LF`; пробельные символы по краям удаляются; 1–4096 code points после нормализации |
+| `MessageContent` | Содержит текст и/или 0–4 упорядоченных `object_id`; хотя бы одна часть непустая |
+| `ObjectId` | Неизменяемый внешний UUID; не раскрывает физический ключ хранилища |
 | `MessagePosition` | Стабильный серверный ключ полного порядка сообщений внутри одного диалога |
 | `MessageCheckpoint` | `dialog_id`, `message_id`, `position`; точная граница подтверждения |
 
-Текст сохраняет пробелы и переносы: `.strip()` не является нормализацией
-содержимого. Текущая v1 schema допускает текст из пробелов; проект сохраняет эту
-семантику. Отдельный запрет визуально пустого текста потребует продуктового
-решения. Пустая строка и `None` в текстовом инкременте отклоняются.
+Пробелы и переносы внутри текста сохраняются, по краям удаляются. Если после
+этого текст пуст, текстовое сообщение отклоняется. Wire schema v1 допускает
+строку из пробелов, но домен применяет более строгое правило.
 
-Общая будущая форма `MessageContent`: `text: MessageText | None` и
-`attachments: tuple[AttachmentSnapshot, ...]`, хотя бы одна часть непустая.
-Порядок вложений значим, IDs уникальны, количество 0–4. Пустая строка
-при наличии вложений нормализуется в `None` до fingerprint.
+Текущая форма `MessageContent`: `text: MessageText | None` и
+`attachments: tuple[ObjectId, ...]`, хотя бы одна часть непустая.
+В снимках вложения представлены UUID, в JSON — UUID-строками.
+Порядок вложений значим, IDs уникальны, количество 0–4. Пустая или состоящая
+только из пробельных символов строка при наличии вложений становится `None`
+до fingerprint.
 
-`AttachmentSnapshot` содержит `object_id`, `media_type`, `size_bytes`,
-`sha256: bytes` длиной 32. Для текущего wire-контракта размер — 1–26 214 400
-байт, media type — 1–255 символов; SHA-256 кодируется Base64 адаптером.
-Вложение не содержит S3 key, presigned URL, filename или SDK объект.
+Сообщение сохраняет только непрозрачные `object_id`. Размер, media type,
+SHA-256 и внутренний S3 key принадлежат Object Storage; домен сообщений
+не вычисляет и не ограничивает суммарный размер вложений.
 Проверку `owner + purpose + READY` выполняет application через Object Storage
-до первого принятия; домен проверяет форму полученного снимка.
+до первого принятия; локальный домен проверяет число и уникальность IDs.
+Аватар группы использует тот же `ObjectId`; application дополнительно проверяет,
+что это изображение. Принятый ID должен обозначать неизменяемое содержимое:
+замена файла создаёт новый объект. Удаление аватара не удаляет объект из S3.
 
-Классы вложений появляются на этапе медиа. Пока поддерживается только текст,
-команда с непустым `attachmentIds` получает явный постоянный отказ о
-неподдерживаемой возможности; вложения нельзя молча отбросить.
+Приём команды с `attachmentIds` появится только после реализации
+application-проверки и хранения сообщения. В текущем каркасе бизнес-команды
+отсутствуют. Общая wire schema `message.v1` пока требует метаданные вложения;
+её согласование с моделью только из IDs остаётся отдельной задачей контрактов.
 
 ### Message — отдельный неизменяемый агрегат
 
-Состояние: `id`, `dialog_id`, `sender_id`, `recipient_id`, `client_message_id`,
+Состояние: `id`, `dialog_id`, `sender_id`, `client_message_id`,
 `content`, `position`, `created_at`.
 
 ```python
-Message.create(
-    *, message_id: UUID, dialog: DirectDialog, sender_id: UUID,
+MessagePostingPolicy.create_message(
+    *, dialog: PostingDialog, sender_id: UUID,
     client_message_id: ClientMessageId, content: MessageContent,
-    position: MessagePosition, now: datetime
+    position: MessagePosition, message_id: UUID | None = None,
+    now: datetime | None = None,
 ) -> Message
 ```
 
-Фабрика проверяет участие отправителя через диалог и сама определяет получателя
-через `dialog.peer_of(sender_id)`. Caller не передаёт произвольного recipient.
-Время должно быть timezone-aware UTC и не предшествовать созданию диалога.
-Диалог в `position` должен совпадать с диалогом сообщения; это также проверяется
-при восстановлении.
+Политика вызывает `dialog.require_can_send(sender_id)`, проверяет время относительно
+создания диалога и вызывает `Message.create`. `Message` не импортирует конкретные
+диалоги, не хранит `dialog_kind`/`recipient_id` и не определяет тип по полям.
+Набор получателей зависит от правил диалога и вычисляется вне сообщения.
 
-Гидратация проверяет локальные свойства: разные sender/recipient, валидные
-content, ID и время. Принадлежность внешнему агрегату требует загруженного
-диалога на пути создания; один `model_validate` этой гарантии не даёт.
+`Message.create` принимает `dialog_id` вместо объекта диалога и создаёт кандидата.
+Как конструктор и гидратация, он проверяет локальные content, позицию, ID и
+timezone-aware время. Диалог в `position` должен совпадать с `dialog_id`.
+Права автора, существование диалога и durable принятие один `Message` не доказывает.
+Старые поля типа/получателя отклоняются как неизвестные; автоматического
+угадывания типа и мутации входного словаря больше нет.
 
 Созданный Python-объект ещё не доказывает durable принятие. Он становится
 каноническим после успешной reservation. При проигранной гонке application
@@ -261,8 +304,8 @@ retention сообщения. Повтор с другим диалогом ил
 Fingerprint строится application из версии семантического формата,
 `dialog_id`, нормализованного текста и упорядоченных attachment IDs.
 Технические IDs, время попытки, correlation/causation и изменяемые внешние
-данные в него не входят. Подтверждённые метаданные вложений сохраняются в
-первом каноническом снимке и повторно не запрашиваются для safe replay.
+данные в него не входят. Принятые `object_id` сохраняются в первом
+каноническом сообщении и не меняются при повторной обработке отправки.
 
 Для существующего ключа сначала сравниваются intent и сохранённый результат;
 потеря доступности Object Storage не должна запрещать завершение уже принятой
@@ -280,11 +323,16 @@ effects и подтверждения публикации. Агрегат са�
 порядок внутри диалога, сохраняется при retry и совпадает с порядком истории
 и watermarks. Сравнение позиций разных диалогов запрещено.
 
-Предлагаемое доменное представление: неизменяемые `dialog_id: UUID` и
-`order_key: int > 0`; методы сравнения сначала проверяют совпадение dialog ID.
+Текущее доменное представление: неизменяемые `dialog_id: UUID` и
+`value: int > 0`; bool/float/строки вместо целого отклоняются. Методы сравнения
+сначала проверяют совпадение dialog ID.
 Это порядковый ключ, а не обязательно плотный счётчик. Его выдаёт application
 через порт; адаптер отвечает за однозначное соответствие persisted ordering.
-`MessageCheckpoint` связывает позицию с конкретными dialog/message IDs.
+`MessageCheckpoint` связывает эту позицию с `message_id` и временем сообщения.
+Его идентичность и порядок определяются позицией и `message_id`; timestamp не
+меняет порядок при восстановлении одного и того же сообщения.
+`Message` проверяет, что его позиция принадлежит тому же диалогу, включая
+восстановление через Pydantic.
 
 Handbook предлагает Cassandra `timeuuid`. Это UUIDv1, тогда как публичные
 новые message IDs — UUIDv7; тип `timestamp` имеет только миллисекундную точность.
@@ -292,7 +340,7 @@ Handbook предлагает Cassandra `timeuuid`. Это UUIDv1, тогда к
 назначения. [Cassandra data types](https://cassandra.apache.org/doc/latest/cassandra/developing/cql/types.html).
 
 До реализации message adapter необходимо выбрать и проверить отображение
-полного порядка в `order_key`, включая tie-break, точность, restart, смену
+полного порядка в `value`, включая tie-break, точность, restart, смену
 writer и откат часов. Обычного wall clock или произвольного сравнения UUID
 недостаточно. После подтверждённой границы нельзя впервые опубликовать входящее
 сообщение с более ранней позицией: иначе watermark ошибочно подтвердит его.
@@ -302,33 +350,42 @@ writer и откат часов. Обычного wall clock или произв
 
 ## 6. Этап receipts: ReceiptWatermark
 
-Естественная идентичность: `(dialog_id, recipient_user_id)`. Для одного личного
+Естественная идентичность: `(dialog_id, user_id)`. Для одного личного
 диалога существуют два независимых состояния — по одному на получателя.
 Состояние общее для его устройств; per-device история не добавляется.
 
 Поля: `delivered_through: MessageCheckpoint | None`,
 `read_through: MessageCheckpoint | None`, `version: int >= 1`,
 `created_at`, `updated_at: datetime | None`.
-Начальное состояние: обе границы `None`, version 1, updated_at `None`.
+Начальное состояние в текущей реализации: обе границы `None`, version 1,
+updated_at равен времени создания.
 
-`ReceiptKind` содержит `DELIVERED` и `READ`.
 `MessageDeliveryStatus` содержит `SENT`, `DELIVERED`, `READ` и используется
 чистой политикой вычисления статуса.
 
 ```python
-ReceiptWatermark.empty(
-    *, dialog: DirectDialog, recipient_user_id: UUID, now: datetime
-) -> ReceiptWatermark
+watermark = ReceiptWatermark.create_empty(
+    dialog_id=dialog.id, user_id=recipient_user_id, now=now
+)
 
-watermark.advance(
-    *, actor_id: UUID, kind: ReceiptKind, through: Message, now: datetime
-) -> bool
+watermark.advance_delivered(
+    actor_id=recipient_user_id, dialog=dialog, through=message, now=now
+)
+watermark.advance_read(
+    actor_id=recipient_user_id, dialog=dialog, through=message, now=now
+)
 ```
 
-`empty` требует участия recipient в диалоге. `advance` проверяет actor=owner,
-совпадение диалога и `through.recipient_id == recipient_user_id`.
-Сообщение отправителя себе не подтверждается. Through message загружается
-application из канонического хранилища; позицию клиент не назначает.
+`create_empty` принимает идентификаторы; application проверяет участие владельца
+до сохранения watermark. Оба метода ACK проверяют actor=owner, участие actor в
+переданном диалоге, совпадение диалога и входящий характер `through`.
+Для группового диалога отправитель не подтверждает собственное сообщение.
+Сообщения себе не подтверждаются. Application загружает `through` из
+канонического хранилища; позицию клиент не назначает.
+Зависимость от конкретных диалогов заменена на `ReceiptDialog`. Проверяется
+текущий доступ читателя, включая повторный ACK; автор старого сообщения группы
+не обязан оставаться её участником. Восстановленный watermark не предоставляет
+прав доступа сам по себе.
 
 Пусть D — delivered, R — read, P — позиция подтверждаемого сообщения;
 `None` считается началом, меньшим любой позиции:
@@ -349,10 +406,13 @@ application из канонического хранилища; позицию �
 различает версия. Это отдельный контракт Messages; строгое `updated_at >
 created_at` из Profile не переносится автоматически.
 
-Чистая `MessageDeliveryPolicy.status_for(message, watermark)` проверяет
-соответствие dialog/recipient и возвращает READ при `position <= R`, затем
+Чистая `MessageDeliveryPolicy.status_for(message, watermark, dialog=dialog,
+recipient_id=user_id)` проверяет соответствие диалогов, доступ читателя и
+владельца watermark, затем возвращает READ при `position <= R`, затем
 DELIVERED при `position <= D`, иначе SENT. Она не читает БД и не отправляет
 события. При отсутствии watermark сохранённое сообщение имеет SENT.
+Если диалог не поддерживает ACK, результат SENT даже при переданном watermark.
+Политика рассчитана на уже сохранённый Message; факт сохранения проверяет application.
 
 Сохранение с expected version и разрешение конфликта — application/repository.
 После успешного CAS необходим durable путь восстановления результата:
@@ -410,7 +470,7 @@ Timeout с неизвестным исходом разрешается адап
 может откатить уже появившуюся более новую message activity.
 
 Для чтения списка actor задаёт user scope. Для get/history application загружает
-диалог и проверяет участие (`actor in dialog`) до чтения закрытых данных. Обогащение
+диалог и вызывает `require_can_read(actor)` до чтения закрытых данных. Обогащение
 через Profile batch нужно только для отображения; оно не заменяет membership.
 
 PostgreSQL Unit of Work и `HOT_DURABLE` Profile опираются на его транзакции.
@@ -422,7 +482,7 @@ PostgreSQL Unit of Work и `HOT_DURABLE` Profile опираются на его 
 
 | Слой | Примеры |
 |---|---|
-| Domain | `SelfDialogNotAllowedError`, `NotDialogParticipantError`, `InvalidMessageTextError`, `EmptyMessageContentError`, `InvalidMessageParticipantsError`, `InvalidReceiptTargetError`, `InvalidDomainTimestampError` |
+| Domain | `SelfDialogNotAllowedError`, `NotDialogParticipantError`, `NotGroupMemberError`, `GroupMemberLimitExceededError`, `InvalidMessageTextError`, `EmptyMessageContentError`, `ReceiptDialogMismatchError`, `NotIncomingMessageError`, `InvalidDomainTimestampError` |
 | Application | `DialogNotFoundError`, `UserNotRegisteredError`, `MessageSendConflictError`, `ConcurrentModificationError`, dependency unavailable и incomplete effects |
 | Infrastructure | Cassandra/HTTP/Kafka исключения преобразуются в оговорённые ошибки портов |
 | Entrypoints | HTTP error/статус, Kafka rejection, технический retry или DLQ согласно контракту |
@@ -442,9 +502,9 @@ Receipt transition также отделён от его wire envelope. При r
 сохранённые идентификаторы, время, correlation и causation первого принятия.
 Повторный запрос с новым transport commandId не переписывает старый event.
 
-## 9. Первый пакет реализации и проверка поведения
+## 9. Исторический первый пакет реализации и проверка поведения
 
-Предлагаемый состав первого изменения исходников:
+Состав исходного предложения от 18 сентября (текущий пакет шире):
 
 ```text
 src/app/domain/
@@ -467,7 +527,7 @@ tests/unit/domain/
 
 Пустые каталоги `entities`, `services`, `events` и заготовки всех будущих
 моделей не добавляются. База ограничена реальными потребностями первого
-агрегата; `VersionedMutableEntity` без изменяемой модели сейчас не нужен.
+агрегата; `VersionedMutableEntity` появился позднее вместе с изменяемыми моделями.
 
 Приёмка первого доменного инкремента:
 
@@ -513,6 +573,9 @@ Ruff/format, `ty` и подходящий unit suite. Реальные Cassandra
 | Адрес дедупликации | Адрес reservation определяется только стабильными sender/clientMessageId. Месяц текущего server receive time из старого handbook нарушает это правило; выбрать детерминированный bucket/locator | Message persistence |
 | Канонический порядок | Выбрать отображение MessagePosition и протокол, исключающий публикацию новых сообщений позади подтверждённой границы, включая restart/rebalance/clock rollback | Message persistence, до receipts |
 | Receipt effects | Сохранение watermark обязано оставлять достаточный durable материал для восстановления sync/publish после crash | Receipt persistence |
+| Изменение состава группы | Исключить принятие сообщения/ACK по устаревшему составу; версия GroupDialog без условной записи или сериализации не закрывает эту гонку | Group persistence и application |
+| Уникальность «Избранного» | Атомарно возвращать один канонический SavedDialog на владельца | Saved dialog repository |
+| Внешние объекты | Стабильный ObjectId, неизменяемое готовое содержимое, проверка ready/permission/purpose; согласование metadata wire DTO | Object Storage и application |
 | Версия receipt event | v1 содержит одну границу `kind/through`, а не полный снимок обеих. Нельзя безусловно отбрасывать все события меньшей общей версии | Receipt client/sync contract |
 
 Пример последнего случая: v2 DELIVERED(10), затем v3 READ(5). Если клиент сначала
