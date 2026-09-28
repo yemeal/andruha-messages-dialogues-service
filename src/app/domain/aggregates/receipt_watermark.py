@@ -1,14 +1,26 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Self
 from uuid import UUID, uuid7
 
 from pydantic import Field, model_validator
 
 from app.domain.base import VersionedMutableEntity
 from app.domain.clock import ensure_utc
-from app.domain.exceptions.receipts import ReadCheckpointExceedsDeliveredError
+from app.domain.exceptions.receipts import (
+    CheckpointMessageMismatchError,
+    NotIncomingMessageError,
+    ReadCheckpointExceedsDeliveredError,
+    ReceiptActorMismatchError,
+    ReceiptDialogMismatchError,
+)
+from app.domain.protocols import ReceiptDialog
 from app.domain.value_objects.message_checkpoint import MessageCheckpoint
 from app.domain.value_objects.message_position import MessagePosition
+
+if TYPE_CHECKING:
+    from app.domain.aggregates.message import Message
 
 
 class ReceiptWatermark(VersionedMutableEntity):
@@ -48,6 +60,9 @@ class ReceiptWatermark(VersionedMutableEntity):
         """
         Гарантирует инвариант: прочтение не может опережать доставку (read <= delivered).
         """
+        for checkpoint in (self.delivered_through, self.read_through):
+            if checkpoint is not None and checkpoint.dialog_id != self.dialog_id:
+                raise ReceiptDialogMismatchError()
         if self.read_through is not None and (
             self.delivered_through is None or self.read_through > self.delivered_through
         ):
@@ -78,41 +93,64 @@ class ReceiptWatermark(VersionedMutableEntity):
             version=1,
         )
 
-    def is_delivered(self, target: MessagePosition | MessageCheckpoint | int) -> bool:
+    def is_delivered(self, target: MessagePosition | MessageCheckpoint) -> bool:
         """
         Проверяет, входит ли позиция сообщения или чекпоинт в подтверждённую границу доставки.
         """
+        pos = self._position_in_dialog(target)
         if self.delivered_through is None:
             return False
-        if isinstance(target, MessageCheckpoint):
-            pos = target.position
-        elif isinstance(target, MessagePosition):
-            pos = target
-        else:
-            pos = MessagePosition(value=target)
+        if (
+            isinstance(target, MessageCheckpoint)
+            and pos == self.delivered_through.position
+            and target.message_id != self.delivered_through.message_id
+        ):
+            raise CheckpointMessageMismatchError()
         return pos <= self.delivered_through.position
 
-    def is_read(self, target: MessagePosition | MessageCheckpoint | int) -> bool:
+    def is_read(self, target: MessagePosition | MessageCheckpoint) -> bool:
         """
         Проверяет, входит ли позиция сообщения или чекпоинт в подтверждённую границу прочтения.
         """
+        pos = self._position_in_dialog(target)
         if self.read_through is None:
             return False
-        if isinstance(target, MessageCheckpoint):
-            pos = target.position
-        elif isinstance(target, MessagePosition):
-            pos = target
-        else:
-            pos = MessagePosition(value=target)
+        if (
+            isinstance(target, MessageCheckpoint)
+            and pos == self.read_through.position
+            and target.message_id != self.read_through.message_id
+        ):
+            raise CheckpointMessageMismatchError()
         return pos <= self.read_through.position
 
-    def advance_delivered(self, checkpoint: MessageCheckpoint, now: datetime) -> bool:
+    def _position_in_dialog(
+        self, target: MessagePosition | MessageCheckpoint
+    ) -> MessagePosition:
+        if isinstance(target, MessageCheckpoint):
+            position = target.position
+        elif isinstance(target, MessagePosition):
+            position = target
+        else:
+            raise TypeError("Receipt target must be a scoped message position")
+        if position.dialog_id != self.dialog_id:
+            raise ReceiptDialogMismatchError()
+        return position
+
+    def advance_delivered(
+        self,
+        *,
+        actor_id: UUID,
+        dialog: ReceiptDialog,
+        through: Message,
+        now: datetime,
+    ) -> bool:
         """
         Сдвигает границу ДОСТАВКИ входящих сообщений.
 
         Если чекпоинт уже доставлен — это запоздалый/повторный ACK,
         метод возвращает False (no-op), версия и updated_at не меняются.
         """
+        checkpoint = self._checkpoint_for_ack(actor_id, dialog, through)
         if self.is_delivered(checkpoint):
             return False
 
@@ -121,7 +159,14 @@ class ReceiptWatermark(VersionedMutableEntity):
             delivered_through=checkpoint,
         )
 
-    def advance_read(self, checkpoint: MessageCheckpoint, now: datetime) -> bool:
+    def advance_read(
+        self,
+        *,
+        actor_id: UUID,
+        dialog: ReceiptDialog,
+        through: Message,
+        now: datetime,
+    ) -> bool:
         """
         Сдвигает границу ПРОЧТЕНИЯ входящих сообщений.
         Автоматически подтягивает границу доставки: delivered_through = max(delivered, read).
@@ -129,6 +174,7 @@ class ReceiptWatermark(VersionedMutableEntity):
         Если чекпоинт уже прочитан — это повторный ACK,
         метод возвращает False (no-op), версия и updated_at не меняются.
         """
+        checkpoint = self._checkpoint_for_ack(actor_id, dialog, through)
         if self.is_read(checkpoint):
             return False
 
@@ -139,4 +185,23 @@ class ReceiptWatermark(VersionedMutableEntity):
             now=now,
             read_through=checkpoint,
             delivered_through=new_delivered,
+        )
+
+    def _checkpoint_for_ack(
+        self,
+        actor_id: UUID,
+        dialog: ReceiptDialog,
+        through: Message,
+    ) -> MessageCheckpoint:
+        if actor_id != self.user_id:
+            raise ReceiptActorMismatchError()
+        if dialog.id != self.dialog_id or through.dialog_id != self.dialog_id:
+            raise ReceiptDialogMismatchError()
+        dialog.require_message_access(sender_id=through.sender_id, reader_id=actor_id)
+        if not dialog.supports_receipts or through.is_sent_by(actor_id):
+            raise NotIncomingMessageError()
+        return MessageCheckpoint.create(
+            position=through.position,
+            message_id=through.id,
+            timestamp=through.created_at,
         )

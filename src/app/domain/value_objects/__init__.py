@@ -4,6 +4,7 @@ from app.domain.value_objects.group_title import GroupTitle
 from app.domain.value_objects.message_checkpoint import MessageCheckpoint
 from app.domain.value_objects.message_content import MessageContent
 from app.domain.value_objects.message_position import MessagePosition
+from app.domain.value_objects.message_send_key import MessageSendKey
 from app.domain.value_objects.message_text import MessageText
 from app.domain.value_objects.object_id import ObjectId
 
@@ -14,6 +15,7 @@ __all__ = [
     "MessageCheckpoint",
     "MessageContent",
     "MessagePosition",
+    "MessageSendKey",
     "MessageText",
     "ObjectId",
 ]

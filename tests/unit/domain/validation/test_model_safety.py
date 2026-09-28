@@ -2,11 +2,12 @@ from datetime import datetime
 from uuid import UUID
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.domain import (
     GroupDialog,
     MessageContent,
+    MessagePosition,
     MessageText,
     ReceiptWatermark,
 )
@@ -45,3 +46,15 @@ def test_mutable_aggregates_cannot_be_dictionary_keys(
     for aggregate in (group, watermark):
         with pytest.raises(TypeError, match="unhashable"):
             hash(aggregate)
+
+
+@pytest.mark.parametrize("value", [True, 1.0, "1"], ids=["bool", "float", "string"])
+def test_order_and_version_reject_coercible_nonintegers(
+    value: object, alice_id: UUID, dialog_id: UUID, now: datetime
+) -> None:
+    with pytest.raises(ValidationError):
+        MessagePosition.model_validate({"dialog_id": dialog_id, "value": value})
+
+    group = GroupDialog.create(title="Group", owner_id=alice_id, now=now)
+    with pytest.raises(ValidationError):
+        GroupDialog.model_validate({**group.model_dump(), "version": value})

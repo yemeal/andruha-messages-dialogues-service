@@ -1,12 +1,7 @@
 from typing import ClassVar
 
 from app.domain.exceptions.base import DomainError
-
-
-class SenderRecipientSameUserError(DomainError):
-    """Отправитель и получатель не могут быть одним и тем же пользователем."""
-
-    default_message: ClassVar[str] = "Sender and recipient cannot be the same user"
+from app.domain.limits import MAX_MESSAGE_TEXT_LENGTH
 
 
 class InvalidClientMessageIdVersionError(DomainError):
@@ -16,10 +11,10 @@ class InvalidClientMessageIdVersionError(DomainError):
 
 
 class InvalidMessageTextError(DomainError):
-    """Текст сообщения должен быть непустым и содержать от 1 до 4096 символов."""
+    """Текст сообщения должен быть непустым и не превышать установленный лимит."""
 
     default_message: ClassVar[str] = (
-        "Message text must be non-empty and between 1 and 4096 code points"
+        f"Message text must be non-empty and between 1 and {MAX_MESSAGE_TEXT_LENGTH} code points"
     )
 
 
@@ -29,12 +24,24 @@ class EmptyMessageContentError(DomainError):
     default_message: ClassVar[str] = "Message content cannot be empty"
 
 
+class InvalidMessageAttachmentsError(DomainError):
+    """Набор вложений нарушает лимит или содержит один объект несколько раз."""
+
+    default_message: ClassVar[str] = "Message attachments are invalid"
+
+
 class MessageCreatedAtPrecedesDialogError(DomainError):
     """Время создания сообщения не может предшествовать времени создания диалога."""
 
     default_message: ClassVar[str] = (
         "Message creation time cannot precede dialog creation time"
     )
+
+
+class PositionDialogMismatchError(DomainError):
+    """Позиции разных диалогов нельзя сравнивать или присваивать сообщению."""
+
+    default_message: ClassVar[str] = "Message position belongs to another dialog"
 
 
 class WatermarkDialogMismatchError(DomainError):
@@ -49,5 +56,5 @@ class WatermarkRecipientMismatchError(DomainError):
     """Попытка рассчитать статус сообщения по ватермарке другого пользователя."""
 
     default_message: ClassVar[str] = (
-        "Watermark user ID does not match message recipient ID"
+        "Watermark user ID does not match the requested recipient"
     )

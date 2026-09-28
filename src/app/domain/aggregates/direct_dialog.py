@@ -63,3 +63,18 @@ class DirectDialog(Entity):
         Возвращает собеседника диалога либо поднимает `NotDialogParticipantError`.
         """
         return self.participants.peer_of(user_id)
+
+    def require_can_send(self, user_id: UUID) -> None:
+        """Отправлять сообщения может только участник неизменной пары."""
+        self.require_can_read(user_id)
+
+    def require_can_read(self, user_id: UUID) -> None:
+        self.participants.peer_of(user_id)
+
+    @property
+    def supports_receipts(self) -> bool:
+        return True
+
+    def require_message_access(self, *, sender_id: UUID, reader_id: UUID) -> None:
+        self.require_can_read(reader_id)
+        self.require_can_read(sender_id)

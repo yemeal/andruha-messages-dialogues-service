@@ -5,6 +5,7 @@ from pydantic import Field, field_validator
 
 from app.domain.base import DomainModel
 from app.domain.exceptions.messages import InvalidMessageTextError
+from app.domain.limits import MAX_MESSAGE_TEXT_LENGTH
 
 
 class MessageText(DomainModel):
@@ -15,7 +16,9 @@ class MessageText(DomainModel):
     value: Annotated[
         str,
         Field(
-            description="Нормализованный текст сообщения (1-4096 code points).",
+            description=(
+                f"Нормализованный текст сообщения (1-{MAX_MESSAGE_TEXT_LENGTH} code points)."
+            ),
         ),
     ]
 
@@ -36,7 +39,7 @@ class MessageText(DomainModel):
         if not normalized:
             raise InvalidMessageTextError()
 
-        if len(normalized) > 4096:
+        if len(normalized) > MAX_MESSAGE_TEXT_LENGTH:
             raise InvalidMessageTextError()
 
         return normalized

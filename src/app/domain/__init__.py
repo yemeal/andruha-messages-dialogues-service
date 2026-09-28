@@ -1,6 +1,7 @@
 from app.domain.aggregates import (
     DirectDialog,
     GroupDialog,
+    Message,
     ReceiptWatermark,
     SavedDialog,
 )
@@ -10,6 +11,11 @@ from app.domain.base import (
     MutableEntity,
     VersionedMutableEntity,
 )
+from app.domain.policies import (
+    MessageDeliveryPolicy,
+    MessageDeliveryStatus,
+    MessagePostingPolicy,
+)
 from app.domain.value_objects import (
     ClientMessageId,
     DirectParticipants,
@@ -17,6 +23,7 @@ from app.domain.value_objects import (
     MessageCheckpoint,
     MessageContent,
     MessagePosition,
+    MessageSendKey,
     MessageText,
     ObjectId,
 )
@@ -29,9 +36,14 @@ __all__ = [
     "Entity",
     "GroupDialog",
     "GroupTitle",
+    "Message",
     "MessageCheckpoint",
     "MessageContent",
+    "MessageDeliveryPolicy",
+    "MessageDeliveryStatus",
     "MessagePosition",
+    "MessagePostingPolicy",
+    "MessageSendKey",
     "MessageText",
     "MutableEntity",
     "ObjectId",

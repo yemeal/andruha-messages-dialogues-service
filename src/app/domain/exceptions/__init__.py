@@ -15,16 +15,24 @@ from app.domain.exceptions.groups import (
 from app.domain.exceptions.messages import (
     EmptyMessageContentError,
     InvalidClientMessageIdVersionError,
+    InvalidMessageAttachmentsError,
     InvalidMessageTextError,
     MessageCreatedAtPrecedesDialogError,
-    SenderRecipientSameUserError,
+    PositionDialogMismatchError,
     WatermarkDialogMismatchError,
     WatermarkRecipientMismatchError,
 )
-from app.domain.exceptions.receipts import ReadCheckpointExceedsDeliveredError
+from app.domain.exceptions.receipts import (
+    CheckpointMessageMismatchError,
+    NotIncomingMessageError,
+    ReadCheckpointExceedsDeliveredError,
+    ReceiptActorMismatchError,
+    ReceiptDialogMismatchError,
+)
 
 __all__ = [
     "CannotRemoveOwnerError",
+    "CheckpointMessageMismatchError",
     "DomainError",
     "EmptyGroupMembersError",
     "EmptyMessageContentError",
@@ -33,14 +41,18 @@ __all__ = [
     "InvalidClientMessageIdVersionError",
     "InvalidDomainTimestampError",
     "InvalidGroupTitleError",
+    "InvalidMessageAttachmentsError",
     "InvalidMessageTextError",
     "MessageCreatedAtPrecedesDialogError",
     "NotDialogParticipantError",
     "NotGroupMemberError",
     "NotGroupOwnerError",
+    "NotIncomingMessageError",
+    "PositionDialogMismatchError",
     "ReadCheckpointExceedsDeliveredError",
+    "ReceiptActorMismatchError",
+    "ReceiptDialogMismatchError",
     "SelfDialogNotAllowedError",
-    "SenderRecipientSameUserError",
     "WatermarkDialogMismatchError",
     "WatermarkRecipientMismatchError",
 ]
