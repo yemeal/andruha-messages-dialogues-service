@@ -51,7 +51,7 @@ def test_add_member() -> None:
     new_user = uuid7()
     t1 = utc_now() + timedelta(seconds=1)
 
-    changed = group.add_member(new_user, now=t1)
+    changed = group.add_member(new_user, now=t1, actor_id=owner)
     assert changed is True
     assert new_user in group
     assert group.member_count == 2
@@ -64,7 +64,7 @@ def test_add_existing_member_raises_error() -> None:
     group = GroupDialog.create(title="Devs", owner_id=owner)
 
     with pytest.raises(GroupMemberAlreadyExistsError):
-        group.add_member(owner, now=utc_now())
+        group.add_member(owner, now=utc_now(), actor_id=owner)
 
 
 def test_remove_member() -> None:
@@ -73,7 +73,7 @@ def test_remove_member() -> None:
     group = GroupDialog.create(title="Devs", owner_id=owner, initial_members=[u1])
     t1 = utc_now() + timedelta(seconds=1)
 
-    changed = group.remove_member(u1, now=t1)
+    changed = group.remove_member(u1, now=t1, actor_id=owner)
     assert changed is True
     assert u1 not in group
     assert group.member_count == 1
@@ -86,7 +86,7 @@ def test_cannot_remove_owner() -> None:
     group = GroupDialog.create(title="Devs", owner_id=owner)
 
     with pytest.raises(CannotRemoveOwnerError):
-        group.remove_member(owner, now=utc_now())
+        group.remove_member(owner, now=utc_now(), actor_id=owner)
 
 
 def test_cannot_remove_non_member() -> None:
@@ -95,7 +95,7 @@ def test_cannot_remove_non_member() -> None:
     outsider = uuid7()
 
     with pytest.raises(NotGroupMemberError):
-        group.remove_member(outsider, now=utc_now())
+        group.remove_member(outsider, now=utc_now(), actor_id=owner)
 
 
 def test_rename() -> None:
@@ -103,7 +103,7 @@ def test_rename() -> None:
     group = GroupDialog.create(title="Old Name", owner_id=owner)
     t1 = utc_now() + timedelta(seconds=1)
 
-    changed = group.rename("New Name", now=t1)
+    changed = group.rename("New Name", now=t1, actor_id=owner)
     assert changed is True
     assert group.title.value == "New Name"
     assert group.version == 2
@@ -111,7 +111,7 @@ def test_rename() -> None:
 
     # Rename with same name is a no-op
     t2 = t1 + timedelta(seconds=1)
-    changed_again = group.rename("New Name", now=t2)
+    changed_again = group.rename("New Name", now=t2, actor_id=owner)
     assert changed_again is False
     assert group.version == 2
     assert group.updated_at == t1
@@ -123,7 +123,7 @@ def test_change_owner() -> None:
     group = GroupDialog.create(title="Devs", owner_id=owner, initial_members=[u1])
     t1 = utc_now() + timedelta(seconds=1)
 
-    changed = group.change_owner(u1, now=t1)
+    changed = group.change_owner(u1, now=t1, actor_id=owner)
     assert changed is True
     assert group.owner_id == u1
     assert group.version == 2
@@ -131,7 +131,7 @@ def test_change_owner() -> None:
     # Cannot transfer ownership to outsider
     outsider = uuid7()
     with pytest.raises(NotGroupMemberError):
-        group.change_owner(outsider, now=t1 + timedelta(seconds=1))
+        group.change_owner(outsider, now=t1 + timedelta(seconds=1), actor_id=u1)
 
 
 def test_direct_hydration_invariants() -> None:

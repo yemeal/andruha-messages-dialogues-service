@@ -7,8 +7,10 @@ from app.domain.exceptions.groups import (
     CannotRemoveOwnerError,
     EmptyGroupMembersError,
     GroupMemberAlreadyExistsError,
+    GroupMemberLimitExceededError,
     InvalidGroupTitleError,
     NotGroupMemberError,
+    NotGroupOwnerError,
 )
 from app.domain.exceptions.messages import (
     EmptyMessageContentError,
@@ -27,6 +29,7 @@ __all__ = [
     "EmptyGroupMembersError",
     "EmptyMessageContentError",
     "GroupMemberAlreadyExistsError",
+    "GroupMemberLimitExceededError",
     "InvalidClientMessageIdVersionError",
     "InvalidDomainTimestampError",
     "InvalidGroupTitleError",
@@ -34,6 +37,7 @@ __all__ = [
     "MessageCreatedAtPrecedesDialogError",
     "NotDialogParticipantError",
     "NotGroupMemberError",
+    "NotGroupOwnerError",
     "ReadCheckpointExceedsDeliveredError",
     "SelfDialogNotAllowedError",
     "SenderRecipientSameUserError",

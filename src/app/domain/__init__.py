@@ -18,6 +18,7 @@ from app.domain.value_objects import (
     MessageContent,
     MessagePosition,
     MessageText,
+    ObjectId,
 )
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "MessagePosition",
     "MessageText",
     "MutableEntity",
+    "ObjectId",
     "ReceiptWatermark",
     "SavedDialog",
     "VersionedMutableEntity",

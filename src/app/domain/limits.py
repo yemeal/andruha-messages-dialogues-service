@@ -1,0 +1,6 @@
+"""Настраиваемые ограничения предметной области."""
+
+MAX_MESSAGE_TEXT_LENGTH = 4096
+MAX_GROUP_TITLE_LENGTH = 128
+MAX_MESSAGE_ATTACHMENTS = 4
+MAX_GROUP_MEMBERS = 1000

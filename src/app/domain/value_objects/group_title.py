@@ -5,6 +5,7 @@ from pydantic import Field, field_validator
 
 from app.domain.base import DomainModel
 from app.domain.exceptions.groups import InvalidGroupTitleError
+from app.domain.limits import MAX_GROUP_TITLE_LENGTH
 
 
 class GroupTitle(DomainModel):
@@ -15,7 +16,9 @@ class GroupTitle(DomainModel):
     value: Annotated[
         str,
         Field(
-            description="Название группового диалога (1-128 code points).",
+            description=(
+                f"Название группового диалога (1-{MAX_GROUP_TITLE_LENGTH} code points)."
+            ),
         ),
     ]
 
@@ -27,7 +30,7 @@ class GroupTitle(DomainModel):
 
         normalized = unicodedata.normalize("NFC", value).strip()
 
-        if not normalized or len(normalized) > 128:
+        if not normalized or len(normalized) > MAX_GROUP_TITLE_LENGTH:
             raise InvalidGroupTitleError()
 
         return normalized
