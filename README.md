@@ -4,8 +4,9 @@
 
 This repository contains domain models for direct, group, and saved dialogues,
 messages with text and attachment object IDs, receipts, and operational HTTP
-infrastructure. The domain enforces local invariants; application use cases,
-persistence, and business endpoints are not connected yet.
+infrastructure. Six concrete application command handlers cover direct/saved
+creation and group membership, message acceptance, and receipt ACKs. Persistence,
+external clients, and business endpoints are not connected yet.
 
 ## Domain design
 
@@ -14,6 +15,7 @@ persistence, and business endpoints are not connected yet.
 - [First domain iteration: walkthrough and review points](docs/domain-iteration-1-walkthrough-2026-09-19.md)
 - [Domain hardening: Message, groups, media, SOLID, and verification](docs/domain-hardening-walkthrough-2026-09-29.md)
 - [Message text editing and frontend edit metadata](docs/message-text-editing-2026-09-30.md)
+- [Application use cases and conditional group writes](src/app/application/README.md)
 
 The domain includes dialogue aggregates, messages with text and/or attachment
 object IDs, sender-scoped send keys, dialog-scoped message positions,
@@ -33,22 +35,22 @@ Attachment size, media type, checksum, and S3 object keys belong to Object Stora
 Domain limits are collected in [`src/app/domain/limits.py`](src/app/domain/limits.py).
 Runtime defaults are at the top of `src/app/core/settings.py`; the request ID
 length default is at the top of its HTTP policy file.
-Message acceptance and receipt ACKs are not durable until application and storage
-adapters are implemented.
+Message acceptance and receipt ACKs require a durable adapter implementing the
+conditional repository contract. Application concurrency tests simulate that port.
 
 ## Responsibility and explicit non-responsibilities
 
-Own local dialogue, message, and receipt rules now; add durable storage and
-business scenarios in subsequent iterations.
+Own dialogue, message, and receipt rules and their application command handlers;
+add durable storage and transport integration in subsequent iterations.
 
 It does not own credentials, public profiles, media object bytes, connection routing, presence, typing state, or online delivery.
 
 ## Hexagonal/DDD layer map
 
 - `domain`: dialogue, message, and receipt models, value objects, policies, and domain errors, using Pydantic for validation.
-- `application`: future use cases and owned ports; depends only on domain.
+- `application`: concrete command/handler use cases, typed results, and owned ports; depends only on domain.
 - `infrastructure`: future adapters implementing application ports.
-- `entrypoints`: transport translation that will call application services.
+- `entrypoints`: transport translation that will call application command handlers.
 - `core`: configuration and cross-cutting logging only.
 
 The dependency direction is `entrypoints -> application -> domain` and `infrastructure -> application ports -> domain`.
