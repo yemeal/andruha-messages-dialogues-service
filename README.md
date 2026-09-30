@@ -13,6 +13,7 @@ persistence, and business endpoints are not connected yet.
 - [DDD and Hexagonal Architecture model proposal, 2026-09-18](docs/domain-model-design-2026-09-18.md)
 - [First domain iteration: walkthrough and review points](docs/domain-iteration-1-walkthrough-2026-09-19.md)
 - [Domain hardening: Message, groups, media, SOLID, and verification](docs/domain-hardening-walkthrough-2026-09-29.md)
+- [Message text editing and frontend edit metadata](docs/message-text-editing-2026-09-30.md)
 
 The domain includes dialogue aggregates, messages with text and/or attachment
 object IDs, sender-scoped send keys, dialog-scoped message positions,
@@ -22,6 +23,10 @@ dialogue protocols. Groups support up to 1000 members, full history for current
 members, membership changes, ownership transfer, renaming, and avatar references.
 Attachments and avatars use ObjectId values serialized as UUIDs; S3 keys and
 expiring download URLs are not part of the domain state.
+The author can edit message text through `Message.edit_text`. Real edits advance
+the message version and edit time; equivalent normalized text leaves both unchanged.
+`is_edited` and `edited_at` expose edit metadata for a future application DTO.
+These properties do not add fields to the existing public messaging schemas.
 The domain does not verify attachment ownership or readiness; an application
 scenario must validate object IDs with Object Storage before acceptance.
 Attachment size, media type, checksum, and S3 object keys belong to Object Storage.
