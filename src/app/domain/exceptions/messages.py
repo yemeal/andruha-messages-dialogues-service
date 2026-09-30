@@ -24,6 +24,20 @@ class EmptyMessageContentError(DomainError):
     default_message: ClassVar[str] = "Message content cannot be empty"
 
 
+class NotMessageAuthorError(DomainError):
+    """Редактировать текст сообщения вправе только его автор."""
+
+    default_message: ClassVar[str] = "Only the message author can edit its text"
+
+
+class InvalidMessageEditMetadataError(DomainError):
+    """Версия сообщения и наличие времени редактирования должны согласовываться."""
+
+    default_message: ClassVar[str] = (
+        "Message edit version and timestamp are inconsistent"
+    )
+
+
 class InvalidMessageAttachmentsError(DomainError):
     """Набор вложений нарушает лимит или содержит один объект несколько раз."""
 

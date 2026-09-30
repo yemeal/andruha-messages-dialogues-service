@@ -32,6 +32,8 @@ def test_message_is_created_and_restored_without_dialog_type_or_recipient(
         "content",
         "position",
         "created_at",
+        "updated_at",
+        "version",
     }
     original = deepcopy(snapshot)
     assert Message.model_validate(snapshot) == message
