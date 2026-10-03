@@ -14,10 +14,11 @@ from app.application.dto.receipts import ReceiptWatermarkDTO
 from app.application.exceptions.groups import (
     ConcurrentModificationError,
     DialogNotFoundError,
+    GroupReadConflictError,
     MessageNotFoundError,
 )
 from app.application.ports.persistence.repositories.group_commands import (
-    GroupCommandRepositoryProtocol,
+    GroupReceiptRepositoryProtocol,
 )
 from app.domain.aggregates.receipt_watermark import ReceiptWatermark
 
@@ -25,7 +26,7 @@ from app.domain.aggregates.receipt_watermark import ReceiptWatermark
 class AdvanceGroupReceiptHandler:
     def __init__(
         self,
-        groups: GroupCommandRepositoryProtocol,
+        groups: GroupReceiptRepositoryProtocol,
         clock: Callable[[], datetime],
         ids: Callable[[], UUID],
         *,
@@ -48,14 +49,21 @@ class AdvanceGroupReceiptHandler:
             if snapshot is None:
                 raise DialogNotFoundError(command.dialog_id)
             snapshot.dialog.require_can_read(command.actor_id)
-            through = await self._groups.get_message(
-                command.dialog_id, command.through_message_id
-            )
+            try:
+                through = await self._groups.get_message(
+                    command.dialog_id,
+                    command.through_message_id,
+                    at_revision=snapshot.revision,
+                )
+                watermark = await self._groups.get_receipt(
+                    command.dialog_id,
+                    command.actor_id,
+                    at_revision=snapshot.revision,
+                )
+            except GroupReadConflictError:
+                continue
             if through is None:
                 raise MessageNotFoundError(command.through_message_id)
-            watermark = await self._groups.get_receipt(
-                command.dialog_id, command.actor_id
-            )
             if watermark is None:
                 watermark = ReceiptWatermark.create_empty(
                     dialog_id=command.dialog_id,
@@ -63,6 +71,8 @@ class AdvanceGroupReceiptHandler:
                     watermark_id=watermark_id,
                     now=self._clock(),
                 )
+            else:
+                watermark = watermark.model_copy(deep=True)
             if command.kind is ReceiptKind.READ:
                 changed = watermark.advance_read(
                     actor_id=command.actor_id,

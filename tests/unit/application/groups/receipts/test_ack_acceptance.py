@@ -88,7 +88,10 @@ async def test_even_noop_ack_must_pass_fence_after_concurrent_removal(
         await asyncio.wait_for(groups.entered.wait(), timeout=2)
         await remove_member(
             RemoveGroupMemberCommand(
-                dialog_id=group_id, actor_id=alice_id, user_id=bob_id
+                command_id=UUID("01995140-0000-7000-8000-000000000784"),
+                dialog_id=group_id,
+                actor_id=alice_id,
+                user_id=bob_id,
             )
         )
         removal_revision = groups.current.revision

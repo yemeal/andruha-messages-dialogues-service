@@ -12,7 +12,12 @@ from app.application.commands.groups.send_message.command import SendGroupMessag
 from app.application.commands.groups.send_message.handler import SendGroupMessageHandler
 from app.application.exceptions.dependencies import StorageUnavailableError
 from app.application.exceptions.groups import ConcurrentModificationError
-from app.application.ports.persistence.models import GroupMutation, GroupSnapshot
+from app.application.ports.persistence.models import (
+    GroupMembershipIntent,
+    GroupMutation,
+    GroupSnapshot,
+)
+from app.domain.aggregates.group_dialog import GroupDialog
 
 
 class WriteOutcomeGroups:
@@ -24,14 +29,43 @@ class WriteOutcomeGroups:
     async def get_by_id(self, dialog_id: UUID):
         return await self.repository.get_by_id(dialog_id)
 
-    async def get_message(self, dialog_id: UUID, message_id: UUID):
-        return await self.repository.get_message(dialog_id, message_id)
+    async def get_message(self, dialog_id: UUID, message_id: UUID, *, at_revision: int):
+        return await self.repository.get_message(
+            dialog_id, message_id, at_revision=at_revision
+        )
 
-    async def get_sent_message(self, dialog_id: UUID, send_key):
-        return await self.repository.get_sent_message(dialog_id, send_key)
+    async def get_sent_message(self, dialog_id: UUID, send_key, *, at_revision: int):
+        return await self.repository.get_sent_message(
+            dialog_id, send_key, at_revision=at_revision
+        )
 
-    async def get_receipt(self, dialog_id: UUID, user_id: UUID):
-        return await self.repository.get_receipt(dialog_id, user_id)
+    async def get_receipt(self, dialog_id: UUID, user_id: UUID, *, at_revision: int):
+        return await self.repository.get_receipt(
+            dialog_id, user_id, at_revision=at_revision
+        )
+
+    async def get_membership_result(
+        self, dialog_id: UUID, command_id: UUID, *, at_revision: int
+    ):
+        return await self.repository.get_membership_result(
+            dialog_id, command_id, at_revision=at_revision
+        )
+
+    async def try_commit_membership(
+        self,
+        expected: GroupSnapshot,
+        candidate: GroupDialog,
+        *,
+        command_id: UUID,
+        intent: GroupMembershipIntent,
+    ) -> bool:
+        self.attempts += 1
+        if self.commit_then_fail:
+            await self.repository.try_commit_membership(
+                expected, candidate, command_id=command_id, intent=intent
+            )
+            raise StorageUnavailableError("Commit outcome is not confirmed")
+        return False
 
     async def try_commit(
         self, expected: GroupSnapshot, mutation: GroupMutation, *, command_id: UUID
@@ -76,13 +110,16 @@ async def test_confirmed_conflicts_are_bounded_without_modifying_group(
     groups, clock, ids, group_id: UUID, alice_id: UUID, bob_id: UUID
 ) -> None:
     conflicts = WriteOutcomeGroups(groups, commit_then_fail=False)
-    handler = RemoveGroupMemberHandler(conflicts, clock.now, ids.new_id, max_attempts=2)
+    handler = RemoveGroupMemberHandler(conflicts, clock.now, max_attempts=2)
     before = groups.current.dialog.model_dump()
 
     with pytest.raises(ConcurrentModificationError):
         await handler(
             RemoveGroupMemberCommand(
-                dialog_id=group_id, actor_id=alice_id, user_id=bob_id
+                command_id=UUID("01995140-0000-7000-8000-000000000790"),
+                dialog_id=group_id,
+                actor_id=alice_id,
+                user_id=bob_id,
             )
         )
 

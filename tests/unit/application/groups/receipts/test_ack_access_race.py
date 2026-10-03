@@ -49,7 +49,10 @@ async def test_removed_member_cannot_commit_ack_from_stale_group_snapshot(
         await asyncio.wait_for(groups.entered.wait(), timeout=2)
         await remove_member(
             RemoveGroupMemberCommand(
-                dialog_id=group_id, actor_id=alice_id, user_id=bob_id
+                command_id=UUID("01995140-0000-7000-8000-000000000783"),
+                dialog_id=group_id,
+                actor_id=alice_id,
+                user_id=bob_id,
             )
         )
         groups.resume.set()
