@@ -1,13 +1,16 @@
+from collections.abc import Mapping
 from typing import Annotated, Self
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
 from app.domain.base import DomainModel
 from app.domain.exceptions.dialogues import (
     NotDialogParticipantError,
     SelfDialogNotAllowedError,
 )
+
+_USER_ID = TypeAdapter(UUID)
 
 
 class DirectParticipants(DomainModel):
@@ -65,16 +68,29 @@ class DirectParticipants(DomainModel):
             return self.first
         raise NotDialogParticipantError()
 
+    @model_validator(mode="before")
+    @classmethod
+    def _canonicalize_input(cls, value: object) -> object:
+        """Нормализует отдельные входные данные до создания frozen-состояния."""
+        if isinstance(value, Mapping):
+            values = dict(value)
+        else:
+            values = {
+                "first": getattr(value, "first", None),
+                "second": getattr(value, "second", None),
+            }
+        try:
+            first = _USER_ID.validate_python(values.get("first"))
+            second = _USER_ID.validate_python(values.get("second"))
+        except ValidationError:
+            # Ошибки поля и missing/extra остаются в обычной валидации модели.
+            return value
+        if first.bytes > second.bytes:
+            first, second = second, first
+        return {**values, "first": first, "second": second}
+
     @model_validator(mode="after")
-    def _canonicalize(self) -> Self:
-        """
-        Канонизирует два UUID по bytes.
-        A-B и B-A равны и имеют одинаковый hash.
-        """
+    def _validate_distinct_users(self) -> Self:
         if self.first == self.second:
             raise SelfDialogNotAllowedError()
-        if self.first.bytes > self.second.bytes:
-            first, second = self.second, self.first
-            object.__setattr__(self, "first", first)
-            object.__setattr__(self, "second", second)
         return self

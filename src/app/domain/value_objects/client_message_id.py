@@ -10,6 +10,7 @@ from app.domain.exceptions.messages import InvalidClientMessageIdVersionError
 class ClientMessageId(DomainModel):
     """
     Клиентский токен идемпотентности отправки сообщения (строго UUIDv7).
+    Новая логическая отправка обязана получить новый ID; retry сохраняет прежний.
     """
 
     value: Annotated[

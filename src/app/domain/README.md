@@ -50,7 +50,7 @@
    ```python
    # ПРАВИЛЬНО: явный бизнес-метод агрегата
    chat_settings.rename(new_title="Команда проекта", now=now)
-    ```
+   ```
 3. **Внутри бизнес-метода вызывается защищённый `_apply_changes`**:
    ```python
    class ChatSettings(VersionedMutableEntity):

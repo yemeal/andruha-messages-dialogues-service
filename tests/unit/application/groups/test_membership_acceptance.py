@@ -16,14 +16,17 @@ from app.domain.exceptions.groups import CannotRemoveOwnerError
 async def test_registration_failure_does_not_apply_candidate_membership(
     registered_users, groups, clock, ids, group_id: UUID, alice_id: UUID
 ) -> None:
-    handler = AddGroupMemberHandler(groups, registered_users, clock.now, ids.new_id)
+    handler = AddGroupMemberHandler(groups, registered_users, clock.now)
     candidate = UUID(int=1005, version=4)
     before = groups.current.dialog.model_dump()
 
     with pytest.raises(UserNotRegisteredError):
         await handler(
             AddGroupMemberCommand(
-                dialog_id=group_id, actor_id=alice_id, user_id=candidate
+                command_id=UUID("01995140-0000-7000-8000-000000000785"),
+                dialog_id=group_id,
+                actor_id=alice_id,
+                user_id=candidate,
             )
         )
 
@@ -40,7 +43,10 @@ async def test_owner_removal_is_rejected_without_changing_group(
     with pytest.raises(CannotRemoveOwnerError):
         await remove_member(
             RemoveGroupMemberCommand(
-                dialog_id=group_id, actor_id=bob_id, user_id=alice_id
+                command_id=UUID("01995140-0000-7000-8000-000000000786"),
+                dialog_id=group_id,
+                actor_id=bob_id,
+                user_id=alice_id,
             )
         )
 
@@ -56,7 +62,10 @@ async def test_missing_group_is_an_application_error_without_writing(
     with pytest.raises(DialogNotFoundError) as error:
         await remove_member(
             RemoveGroupMemberCommand(
-                dialog_id=missing_id, actor_id=alice_id, user_id=bob_id
+                command_id=UUID("01995140-0000-7000-8000-000000000787"),
+                dialog_id=missing_id,
+                actor_id=alice_id,
+                user_id=bob_id,
             )
         )
 

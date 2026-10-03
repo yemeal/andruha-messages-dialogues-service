@@ -13,6 +13,14 @@ class ConcurrentModificationError(ApplicationError):
     """Исчерпан предел повторов после подтверждённых конфликтов ревизии."""
 
 
+class GroupReadConflictError(ApplicationError):
+    """Данные нельзя прочитать на ожидаемой ревизии; нужна новая попытка."""
+
+
+class GroupMembershipConflictError(ApplicationError):
+    """command_id команды состава уже принят с другим намерением."""
+
+
 class MessageNotFoundError(ApplicationError):
     def __init__(self, message_id: UUID) -> None:
         self.message_id = message_id
@@ -20,4 +28,4 @@ class MessageNotFoundError(ApplicationError):
 
 
 class MessageSendConflictError(ApplicationError):
-    """Клиентский ключ отправки уже обозначает другое содержимое."""
+    """Ключ отправки конфликтует с неизменяемыми полями или исходным текстом."""

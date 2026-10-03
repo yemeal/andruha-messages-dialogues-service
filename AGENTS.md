@@ -81,10 +81,10 @@
 ## Контекст: messages-dialogues-service
 
 - Предметная область: долговременное состояние диалогов, сообщений и receipts. Учётные данные, профили, байты медиа, соединения, presence/typing и доставка онлайн принадлежат другим границам.
-- Текущая реализация — Python 3.14/FastAPI с Pydantic и uv: HTTP health, lifecycle, request ID, logging/settings. Доменные модели, business use cases и persistence ещё не реализованы; подключение Cassandra или брокера не следует из архитектурного плана.
-- Начни с `README.md`, `src/app/entrypoints/http/main.py`, `core/settings.py` и затрагиваемого пакета. `domain`, `application/services`, `application/ports`, `infrastructure` — границы будущей реализации; `entrypoints/messaging` пока каркас.
-- Общая иерархия доменных классов и clock — стандарт для новой доменной работы, а не описание существующих файлов. Вводи только нужные базовые классы/порты в рамках согласованного сценария; не копируй модель соседнего bounded context.
-- Тесты сейчас проверяют техническую HTTP-основу: `tests/unit` и `tests/integration/test_http_bootstrap.py`. Новые тесты сообщений/диалогов раскладывай по domain/application/adapter; health `200` не доказывает работоспособность переписки.
+- Текущая реализация — Python 3.14/FastAPI с Pydantic и uv: доменные агрегаты Direct/Group/Saved, Message с редактированием текста, ReceiptWatermark, Value Objects и policies; HTTP health, lifecycle, request ID, logging/settings. Шесть конкретных application handlers создают Direct/Saved, меняют состав группы, принимают сообщения и ACK. Реальные persistence/Identity/Object Storage адаптеры и business endpoints ещё не подключены.
+- Начни с `README.md`, `CONTEXT.md` и затрагиваемого пакета. Для application прочитай `src/app/application/README.md` и `docs/adr/0001-conditional-group-command-writes.md`: use cases находятся в `application/commands`, клиентские порты — в `application/ports`. `application/services` и `entrypoints/messaging` остаются каркасами.
+- `src/app/domain/base.py` содержит DomainModel/Entity/MutableEntity/VersionedMutableEntity, валидирующие копирование и кандидатные мутации; `domain/clock.py` нормализует явное время. Переиспользуй эти механизмы. Техническая GroupSnapshot.revision связывает групповые действия; доменная version сама не обеспечивает атомарность хранилища.
+- Domain и application unit tests проверяют бизнес-поведение и координацию на fakes портов. `tests/integration/test_http_bootstrap.py` проверяет HTTP-основу. Реальная БД, распределённая уникальность и восстановление после отказа требуют отдельных adapter integration tests; текущие проверки их не доказывают.
 
 ### Команды и проверки
 

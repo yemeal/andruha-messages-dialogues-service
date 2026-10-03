@@ -9,11 +9,12 @@ from app.application.dto.messages import MessageDTO
 from app.application.exceptions.groups import (
     ConcurrentModificationError,
     DialogNotFoundError,
+    GroupReadConflictError,
     MessageSendConflictError,
 )
 from app.application.ports.objects.attachments import AttachmentVerifierProtocol
 from app.application.ports.persistence.repositories.group_commands import (
-    GroupCommandRepositoryProtocol,
+    GroupMessageRepositoryProtocol,
 )
 from app.domain.policies.message_posting import MessagePostingPolicy
 from app.domain.value_objects.client_message_id import ClientMessageId
@@ -25,7 +26,7 @@ from app.domain.value_objects.message_send_key import MessageSendKey
 class SendGroupMessageHandler:
     def __init__(
         self,
-        groups: GroupCommandRepositoryProtocol,
+        groups: GroupMessageRepositoryProtocol,
         clock: Callable[[], datetime],
         ids: Callable[[], UUID],
         attachments: AttachmentVerifierProtocol,
@@ -57,9 +58,19 @@ class SendGroupMessageHandler:
             if snapshot is None:
                 raise DialogNotFoundError(command.dialog_id)
             snapshot.dialog.require_can_send(command.actor_id)
-            existing = await self._groups.get_sent_message(command.dialog_id, send_key)
+            try:
+                existing = await self._groups.get_sent_message(
+                    command.dialog_id, send_key, at_revision=snapshot.revision
+                )
+            except GroupReadConflictError:
+                continue
             if existing is not None:
-                if existing.content != content:
+                if (
+                    existing.dialog_id != command.dialog_id
+                    or existing.send_key != send_key
+                    or existing.content.attachments != content.attachments
+                    or (not existing.is_edited and existing.content != content)
+                ):
                     raise MessageSendConflictError()
                 # Даже replay должен условно подтвердить текущие права.
                 if await self._groups.try_commit(snapshot, None, command_id=command_id):

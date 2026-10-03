@@ -88,7 +88,12 @@ async def test_removed_sender_cannot_receive_success_from_old_message_replay(
     )
     accepted = await send_message(command)
     await remove_member(
-        RemoveGroupMemberCommand(dialog_id=group_id, actor_id=alice_id, user_id=bob_id)
+        RemoveGroupMemberCommand(
+            command_id=UUID("01995140-0000-7000-8000-000000000781"),
+            dialog_id=group_id,
+            actor_id=alice_id,
+            user_id=bob_id,
+        )
     )
     revision = groups.current.revision
 

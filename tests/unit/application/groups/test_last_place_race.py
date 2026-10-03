@@ -31,20 +31,20 @@ async def test_two_candidates_for_last_group_place_accept_exactly_one(
     )
     assert group.member_count == 999
     groups.current = GroupSnapshot(dialog=group, revision=1, last_position=0)
-    first_handler = AddGroupMemberHandler(
-        groups, registered_users, clock.now, ids.new_id
-    )
+    first_handler = AddGroupMemberHandler(groups, registered_users, clock.now)
     second_handler = AddGroupMemberHandler(
         groups,
         registered_users,
         clock.now,
-        ids.new_id,
     )
     groups.pause_type = GroupDialog
     pending = asyncio.create_task(
         first_handler(
             AddGroupMemberCommand(
-                dialog_id=group_id, actor_id=alice_id, user_id=first_id
+                command_id=UUID("01995140-0000-7000-8000-000000000788"),
+                dialog_id=group_id,
+                actor_id=alice_id,
+                user_id=first_id,
             )
         )
     )
@@ -52,7 +52,10 @@ async def test_two_candidates_for_last_group_place_accept_exactly_one(
         await asyncio.wait_for(groups.entered.wait(), timeout=2)
         winner = await second_handler(
             AddGroupMemberCommand(
-                dialog_id=group_id, actor_id=alice_id, user_id=second_id
+                command_id=UUID("01995140-0000-7000-8000-000000000789"),
+                dialog_id=group_id,
+                actor_id=alice_id,
+                user_id=second_id,
             )
         )
         groups.resume.set()
