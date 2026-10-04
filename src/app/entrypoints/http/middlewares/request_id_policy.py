@@ -8,6 +8,7 @@ from typing import Protocol
 
 RequestIdGenerator = Callable[[], str]
 
+DEFAULT_REQUEST_ID_MAX_LENGTH = 128
 _SAFE_REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*")
 
 
@@ -23,7 +24,7 @@ class RequestIdResolver(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ValidatedRequestIdResolver:
-    max_length: int = 128
+    max_length: int = DEFAULT_REQUEST_ID_MAX_LENGTH
     generator: RequestIdGenerator = _generate_request_id
 
     def __post_init__(self) -> None:
