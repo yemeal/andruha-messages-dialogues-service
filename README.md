@@ -70,6 +70,9 @@ No business API or transport contract is available yet.
 - `HOST`, `PORT`
 - `DEV_LOGS`, `LOG_LEVEL`, `MUTE_LOGGERS`
 
+Настройки валидируются через `pydantic-settings`; сервис читает их из переменных
+окружения и UTF-8-файла `.env`.
+
 ## Liveness and readiness
 
 `GET /health/live` reports that the process is running. `GET /health/ready` reports readiness after application lifespan initialization. It intentionally performs no fake dependency probes.
