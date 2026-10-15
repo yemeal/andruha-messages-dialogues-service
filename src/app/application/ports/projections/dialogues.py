@@ -2,12 +2,13 @@ from typing import Protocol
 from uuid import UUID
 
 from app.domain.aggregates.direct_dialog import DirectDialog
+from app.domain.aggregates.group_dialog import GroupDialog
 from app.domain.aggregates.saved_dialog import SavedDialog
 
 
 class DialogProjectionsProtocol(Protocol):
     async def ensure_for_user(
-        self, user_id: UUID, dialog: DirectDialog | SavedDialog
+        self, user_id: UUID, dialog: DirectDialog | SavedDialog | GroupDialog
     ) -> None:
         """Подтверждает карточку и список канонического диалога для user_id.
 

@@ -21,6 +21,18 @@ class GroupMembershipConflictError(ApplicationError):
     """command_id команды состава уже принят с другим намерением."""
 
 
+class GroupMetadataConflictError(ApplicationError):
+    """command_id команды метаданных уже принят с другим намерением."""
+
+
+class GroupOwnershipConflictError(ApplicationError):
+    """command_id команды смены владельца уже принят с другим намерением."""
+
+
+class CannotTransferOwnershipToSelfError(ApplicationError):
+    """Попытка передать владение группой самому себе."""
+
+
 class MessageNotFoundError(ApplicationError):
     def __init__(self, message_id: UUID) -> None:
         self.message_id = message_id
