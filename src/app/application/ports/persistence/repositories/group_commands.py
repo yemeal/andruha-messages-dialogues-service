@@ -4,13 +4,25 @@ from uuid import UUID
 from app.application.ports.persistence.models import (
     GroupMembershipAcceptance,
     GroupMembershipIntent,
+    GroupMetadataAcceptance,
+    GroupMetadataIntent,
     GroupMutation,
+    GroupOwnershipAcceptance,
+    GroupOwnershipIntent,
     GroupSnapshot,
 )
 from app.domain.aggregates.group_dialog import GroupDialog
 from app.domain.aggregates.message import Message
 from app.domain.aggregates.receipt_watermark import ReceiptWatermark
 from app.domain.value_objects.message_send_key import MessageSendKey
+
+
+class GroupCreationRepositoryProtocol(Protocol):
+    """Создание начального канонического состояния группы."""
+
+    async def create_group(self, group: GroupDialog) -> None:
+        """Сохраняет новую группу с revision=1, last_position=0."""
+        ...
 
 
 class GroupRevisionRepositoryProtocol(Protocol):
@@ -117,8 +129,49 @@ class GroupMessageRepositoryProtocol(GroupCommitRepositoryProtocol, Protocol):
         ...
 
 
+class GroupMetadataRepositoryProtocol(GroupRevisionRepositoryProtocol, Protocol):
+    async def get_metadata_result(
+        self, dialog_id: UUID, command_id: UUID, *, at_revision: int
+    ) -> GroupMetadataAcceptance | None:
+        """Результат команды метаданных на at_revision; отсутствие тоже согласовано."""
+        ...
+
+    async def try_commit_metadata(
+        self,
+        expected: GroupSnapshot,
+        candidate: GroupDialog,
+        *,
+        command_id: UUID,
+        intent: GroupMetadataIntent,
+    ) -> bool:
+        """Атомарная проверка ревизии, сохранение новой версии группы и результата команды."""
+        ...
+
+
+class GroupOwnershipRepositoryProtocol(GroupRevisionRepositoryProtocol, Protocol):
+    async def get_ownership_result(
+        self, dialog_id: UUID, command_id: UUID, *, at_revision: int
+    ) -> GroupOwnershipAcceptance | None:
+        """Результат команды передачи владения на at_revision; отсутствие тоже согласовано."""
+        ...
+
+    async def try_commit_ownership(
+        self,
+        expected: GroupSnapshot,
+        candidate: GroupDialog,
+        *,
+        command_id: UUID,
+        intent: GroupOwnershipIntent,
+    ) -> bool:
+        """Атомарная проверка ревизии, сохранение нового владельца группы и результата команды."""
+        ...
+
+
 class GroupCommandRepositoryProtocol(
+    GroupCreationRepositoryProtocol,
     GroupMembershipRepositoryProtocol,
+    GroupOwnershipRepositoryProtocol,
+    GroupMetadataRepositoryProtocol,
     GroupMessageRepositoryProtocol,
     GroupReceiptRepositoryProtocol,
     Protocol,

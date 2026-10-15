@@ -4,12 +4,13 @@ from app.application.exceptions.dependencies import ProjectionUnavailableError
 from app.application.exceptions.dialogues import DialogProjectionsIncompleteError
 from app.application.ports.projections.dialogues import DialogProjectionsProtocol
 from app.domain.aggregates.direct_dialog import DirectDialog
+from app.domain.aggregates.group_dialog import GroupDialog
 from app.domain.aggregates.saved_dialog import SavedDialog
 
 
 async def ensure_dialog_projections(
     projections: DialogProjectionsProtocol,
-    dialog: DirectDialog | SavedDialog,
+    dialog: DirectDialog | SavedDialog | GroupDialog,
     users: tuple[UUID, ...],
 ) -> None:
     for user_id in users:
