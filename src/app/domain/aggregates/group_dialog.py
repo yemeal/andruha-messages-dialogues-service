@@ -45,8 +45,10 @@ class GroupDialog(VersionedMutableEntity):
     ]
     avatar_object_id: Annotated[
         ObjectId | None,
-        Field(description="Ссылка на готовое изображение в Object Storage."),
-    ] = Field(default=None)
+        Field(
+            default=None, description="Ссылка на готовое изображение в Object Storage."
+        ),
+    ]
 
     @field_serializer("avatar_object_id")
     def _serialize_avatar(self, value: ObjectId | None) -> UUID | None:
