@@ -12,6 +12,7 @@ from app.application.exceptions.groups import (
     DialogNotFoundError,
     GroupOwnershipConflictError,
     GroupReadConflictError,
+    InvalidGroupCasRetryAttemptsError,
 )
 from app.application.ports.persistence.models import GroupOwnershipIntent
 from app.application.ports.persistence.repositories.group_commands import (
@@ -28,7 +29,7 @@ class TransferGroupOwnershipHandler:
         max_attempts: int = MAX_GROUP_COMMAND_ATTEMPTS,
     ) -> None:
         if max_attempts < 1:
-            raise ValueError("max_attempts must be positive")
+            raise InvalidGroupCasRetryAttemptsError(max_attempts)
         self._groups = groups
         self._clock = clock
         self._max_attempts = max_attempts

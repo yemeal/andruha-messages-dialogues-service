@@ -9,6 +9,7 @@ from app.application.commands.groups.edit_message.handler import (
     EditGroupMessageTextHandler,
 )
 from app.application.commands.groups.send_message.command import SendGroupMessageCommand
+from app.application.exceptions.groups import InvalidGroupCasRetryAttemptsError
 from app.application.ports.persistence.models import GroupMutation, GroupSnapshot
 from app.domain.aggregates.message import Message
 from app.domain.value_objects.message_send_key import MessageSendKey
@@ -513,7 +514,9 @@ def test_edit_group_message_handler_validates_max_attempts(
     editing_groups: MessageEditingGroupsWrapper,
     clock,
 ) -> None:
-    with pytest.raises(ValueError, match="max_attempts must be positive"):
+    with pytest.raises(
+        InvalidGroupCasRetryAttemptsError, match="CAS retry attempts limit"
+    ):
         EditGroupMessageTextHandler(
             groups=editing_groups, clock=clock.now, max_attempts=0
         )
