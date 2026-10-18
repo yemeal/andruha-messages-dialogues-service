@@ -17,6 +17,7 @@ class MessageDTO(BaseDTO):
     version: int
     created_at: datetime
     edited_at: datetime | None
+    is_edited: bool = False
 
     @classmethod
     def from_domain(cls, message: Message) -> Self:
@@ -31,4 +32,5 @@ class MessageDTO(BaseDTO):
             version=message.version,
             created_at=message.created_at,
             edited_at=message.edited_at,
+            is_edited=message.is_edited,
         )

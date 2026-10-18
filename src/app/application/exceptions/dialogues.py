@@ -14,3 +14,15 @@ class DialogProjectionsIncompleteError(ApplicationError):
         self.dialog_id = dialog_id
         self.user_id = user_id
         super().__init__(f"Dialog {dialog_id} projection is incomplete for {user_id}")
+
+
+class ReceiptsNotSupportedError(ApplicationError):
+    def __init__(self, dialog_id: UUID) -> None:
+        self.dialog_id = dialog_id
+        super().__init__(f"Dialog {dialog_id} does not support receipts")
+
+
+class UnsupportedDialogKindError(ApplicationError):
+    def __init__(self, kind: str) -> None:
+        self.kind = kind
+        super().__init__(f"Unsupported dialog kind: {kind}")

@@ -1,4 +1,5 @@
 from typing import Protocol
+from uuid import UUID
 
 from app.application.ports.persistence.models import CanonicalDialog
 from app.domain.aggregates.direct_dialog import DirectDialog
@@ -6,6 +7,8 @@ from app.domain.value_objects.direct_participants import DirectParticipants
 
 
 class DirectDialogRepositoryProtocol(Protocol):
+    async def get_by_id(self, dialog_id: UUID) -> DirectDialog | None: ...
+
     async def get_by_participants(
         self, participants: DirectParticipants
     ) -> DirectDialog | None: ...
