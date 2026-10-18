@@ -57,6 +57,10 @@ class GroupCommitRepositoryProtocol(GroupRevisionRepositoryProtocol, Protocol):
         Новое Message условно резервирует send key и ID, а позиция равна
         last_position + 1. Существующий ключ не создаёт новую запись даже
         при ошибочном отсутствии результата предварительного чтения.
+        Мутация Message с version > 1 (редактирование текста) проверяет
+        совпадение expected_message_version (версия в хранилище равна version - 1),
+        сохранение неизменных атрибутов отправки и увеличивает revision группы
+        без изменения last_position.
         ReceiptWatermark сохраняет ID, read/delivered не уменьшаются;
         версия кандидата следует непосредственно за сохранённой версией.
         Эти условия проверяются вместе с revision; нарушение даёт False
@@ -116,6 +120,12 @@ class GroupReceiptRepositoryProtocol(GroupCommitRepositoryProtocol, Protocol):
 
 
 class GroupMessageRepositoryProtocol(GroupCommitRepositoryProtocol, Protocol):
+    async def get_message_by_id(
+        self, dialog_id: UUID, message_id: UUID, *, at_revision: int
+    ) -> Message | None:
+        """Изолированное сообщение указанного диалога по ID на at_revision."""
+        ...
+
     async def get_sent_message(
         self, dialog_id: UUID, send_key: MessageSendKey, *, at_revision: int
     ) -> Message | None:
