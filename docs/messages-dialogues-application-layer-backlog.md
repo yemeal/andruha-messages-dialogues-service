@@ -247,7 +247,7 @@ flowchart TD
       async def save_watermark(self, watermark: ReceiptWatermark, *, expected_version: int) -> bool: ...
   ```
 - **Критерии приёмки (AC)**:
-  - [ ] Контракты обеспечивают LWT-гарантии (уникальность `MessageSendKey` в бакете месяца и монотонность версий watermark).
+  - [x] Контракты обеспечивают LWT-гарантии (уникальность `MessageSendKey` в бакете месяца и монотонность версий watermark).
 
 ---
 
@@ -268,9 +268,9 @@ flowchart TD
   7. Создание через `MessagePostingPolicy.create_message(dialog=dialog, position=last_pos + 1, ...)`.
   8. Атомарное сохранение сообщения и резервации ключа.
 - **Критерии приёмки (AC)**:
-  - [ ] Отправка пользователем, не входящим в пару диалога, возбуждает `NotDialogParticipantError`.
-  - [ ] Позиции сообщений строго возрастают: 1, 2, 3...
-  - [ ] Идемпотентный повтор возвращает созданное ранее сообщение.
+  - [x] Отправка пользователем, не входящим в пару диалога, возбуждает `NotDialogParticipantError`.
+  - [x] Позиции сообщений строго возрастают: 1, 2, 3...
+  - [x] Идемпотентный повтор возвращает созданное ранее сообщение.
 
 ---
 
@@ -287,8 +287,8 @@ flowchart TD
   3. `MessagePostingPolicy.create_message`.
   4. Сохранение сообщения. Для `SavedDialog` receipt watermarks не создаются (`supports_receipts = False`).
 - **Критерии приёмки (AC)**:
-  - [ ] Попытка отправки в чужой `SavedDialog` отклоняется.
-  - [ ] Receipt watermarks не инициализируются и не продвигаются.
+  - [x] Попытка отправки в чужой `SavedDialog` отклоняется.
+  - [x] Receipt watermarks не инициализируются и не продвигаются.
 
 ---
 
@@ -306,9 +306,9 @@ flowchart TD
   4. Вызов `advance_delivered` или `advance_read`.
   5. Условное сохранение с проверкой `expected_version` (OCC).
 - **Критерии приёмки (AC)**:
-  - [ ] Отметка `READ` гарантирует `DELIVERED >= READ`.
-  - [ ] Устаревший или меньший checkpoint — безопасный no-op (`changed=False`).
-  - [ ] Версия статуса строго монотонна.
+  - [x] Отметка `READ` гарантирует `DELIVERED >= READ`.
+  - [x] Устаревший или меньший checkpoint — безопасный no-op (`changed=False`).
+  - [x] Версия статуса строго монотонна.
 
 ---
 
@@ -327,8 +327,8 @@ flowchart TD
      - `DIRECT` → `SendDirectMessageHandler` / `AdvanceDirectReceiptHandler`;
      - `SAVED` → `SendSavedMessageHandler` (для receipts возбуждает отказ/no-op).
 - **Критерии приёмки (AC)**:
-  - [ ] Несуществующий `dialog_id` вызывает `DialogNotFoundError`.
-  - [ ] Корректное прозрачное делегирование без дублирования бизнес-логики.
+  - [x] Несуществующий `dialog_id` вызывает `DialogNotFoundError`.
+  - [x] Корректное прозрачное делегирование без дублирования бизнес-логики.
 
 ---
 
