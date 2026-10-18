@@ -1,0 +1,86 @@
+from collections.abc import Callable
+from datetime import datetime
+from uuid import UUID
+
+from app.application.commands.dialogues.send_saved_message.command import (
+    SendSavedMessageCommand,
+)
+from app.application.commands.dialogues.send_saved_message.result import (
+    SendSavedMessageResult,
+)
+from app.application.dto.messages import MessageDTO
+from app.application.exceptions.groups import (
+    DialogNotFoundError,
+    MessageSendConflictError,
+)
+from app.application.ports.objects.attachments import AttachmentVerifierProtocol
+from app.application.ports.persistence.repositories.direct_messages import (
+    DirectMessageRepositoryProtocol,
+)
+from app.application.ports.persistence.repositories.saved_dialogues import (
+    SavedDialogRepositoryProtocol,
+)
+from app.domain.policies.message_posting import MessagePostingPolicy
+from app.domain.value_objects.client_message_id import ClientMessageId
+from app.domain.value_objects.message_content import MessageContent
+from app.domain.value_objects.message_position import MessagePosition
+from app.domain.value_objects.message_send_key import MessageSendKey
+
+
+class SendSavedMessageHandler:
+    def __init__(
+        self,
+        saved_dialogs: SavedDialogRepositoryProtocol,
+        messages: DirectMessageRepositoryProtocol,
+        attachments: AttachmentVerifierProtocol,
+        clock: Callable[[], datetime],
+        ids: Callable[[], UUID],
+    ) -> None:
+        self._saved_dialogs = saved_dialogs
+        self._messages = messages
+        self._attachments = attachments
+        self._clock = clock
+        self._ids = ids
+
+    async def __call__(
+        self, command: SendSavedMessageCommand
+    ) -> SendSavedMessageResult:
+        dialog = await self._saved_dialogs.get_by_id(command.dialog_id)
+        if dialog is None:
+            raise DialogNotFoundError(command.dialog_id)
+        dialog.require_can_send(command.actor_id)
+
+        client_id = ClientMessageId.from_uuid(command.client_message_id)
+        content = MessageContent.from_parts(
+            text=command.text, attachments=command.attachment_ids
+        )
+        send_key = MessageSendKey(
+            sender_id=command.actor_id, client_message_id=client_id
+        )
+
+        existing = await self._messages.get_by_send_key(send_key)
+        if existing is not None:
+            if (
+                existing.dialog_id != command.dialog_id
+                or existing.send_key != send_key
+                or existing.content.attachments != content.attachments
+                or (not existing.is_edited and existing.content != content)
+            ):
+                raise MessageSendConflictError()
+            return SendSavedMessageResult(message=MessageDTO.from_domain(existing))
+
+        if content.attachments:
+            await self._attachments.require_ready(command.actor_id, content.attachments)
+
+        last_pos = await self._messages.get_last_position(command.dialog_id)
+        message = MessagePostingPolicy.create_message(
+            dialog=dialog,
+            sender_id=command.actor_id,
+            client_message_id=client_id,
+            content=content,
+            position=MessagePosition(dialog_id=command.dialog_id, value=last_pos + 1),
+            message_id=self._ids(),
+            now=self._clock(),
+        )
+        saved = await self._messages.save_message(message, idempotency_key=send_key)
+        return SendSavedMessageResult(message=MessageDTO.from_domain(saved))
