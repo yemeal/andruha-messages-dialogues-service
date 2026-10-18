@@ -41,3 +41,16 @@ class MessageNotFoundError(ApplicationError):
 
 class MessageSendConflictError(ApplicationError):
     """Ключ отправки конфликтует с неизменяемыми полями или исходным текстом."""
+
+
+class InvalidGroupCasRetryAttemptsError(ApplicationError):
+    """Предел CAS-попыток повтора групповой команды должен быть >= 1."""
+
+    def __init__(self, max_attempts: int) -> None:
+        self.max_attempts = max_attempts
+        super().__init__(
+            f"Group command CAS retry attempts limit (max_attempts) must be positive, got {max_attempts}"
+        )
+
+
+InvalidGroupCommandMaxAttemptsError = InvalidGroupCasRetryAttemptsError
