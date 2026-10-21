@@ -334,26 +334,31 @@ flowchart TD
 
 ## EPIC-4: Outbox и публикация интеграционных событий
 
-### MD-401: Порт Outbox и детерминированная фабрика событий
+### MD-401: Порт Outbox и фабрика событий
 - **Тип**: Technical Task
 - **Приоритет**: Highest
-- **Цель**: Спроектировать порт сохранения интеграционных событий и детерминированную генерацию UUID событий по главе 03.
+- **Цель**: Спроектировать порт сохранения интеграционных событий и генерацию событий с UUIDv7 по контрактам Andruha.
 - **Затрагиваемые границы**:
-  - `src/app/application/ports/events/outbox.py`
+  - `src/app/application/ports/dto/outbox.py`
+  - `src/app/application/ports/persistence/repositories/outbox.py`
   - `src/app/application/events/models.py`
   - `src/app/application/events/factory.py`
+  - `tests/unit/application/outbox/test_outbox_message.py`
+  - `tests/unit/application/events/test_event_models.py`
   - `tests/unit/application/events/test_event_factory.py`
 - **Спецификация**:
-  1. Формула UUIDv5: `message_event_id(message_id, event_type, target_user_id)`.
+  1. Генерация идентификаторов: `uuid7()`.
   2. Определение моделей событий согласно контрактам Andruha:
      - `MessagePersistedEvent` (`targetUserId = sender_id`);
      - `MessageCreatedEvent` (`targetUserId = recipient_id`);
      - `ReceiptWatermarkAdvancedEvent` (`targetUserId = original_sender_id`);
      - `MessageRejectedEvent` (при конфликте отправки).
-  3. `OutboxRepositoryProtocol.save_events(events: tuple[IntegrationEvent, ...])`.
+  3. `OutboxRepositoryProtocol` с методами сохранения и обслуживания жизненного цикла.
 - **Критерии приёмки (AC)**:
-  - [ ] Одинаковые входные аргументы всегда дают идентичный `event_id` (детерминизм).
-  - [ ] Wire-поле партиционирования Kafka — `targetUserId`.
+  - [x] Идентификаторы событий и outbox-записей генерируются через `uuid7()`.
+  - [x] Модели соответствуют контрактам `contracts/messaging/events/` и `contracts/envelope/event-envelope.v1.schema.json`.
+  - [x] 100% покрытие unit-тестами.
+  - [x] Wire-поле партиционирования Kafka — `targetUserId`.
 
 ---
 
