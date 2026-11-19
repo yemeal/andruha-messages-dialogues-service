@@ -17,6 +17,10 @@ class GroupReadConflictError(ApplicationError):
     """Данные нельзя прочитать на ожидаемой ревизии; нужна новая попытка."""
 
 
+class GroupCreationConflictError(ApplicationError):
+    """Create operation ID was already accepted with another intent."""
+
+
 class GroupMembershipConflictError(ApplicationError):
     """command_id команды состава уже принят с другим намерением."""
 
@@ -41,6 +45,10 @@ class MessageNotFoundError(ApplicationError):
 
 class MessageSendConflictError(ApplicationError):
     """Ключ отправки конфликтует с неизменяемыми полями или исходным текстом."""
+
+
+class MessageEditConflictError(ApplicationError):
+    """Edit command ID was already accepted with another intent."""
 
 
 class InvalidGroupCasRetryAttemptsError(ApplicationError):

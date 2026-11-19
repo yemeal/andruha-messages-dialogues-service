@@ -1,4 +1,4 @@
-from uuid import UUID
+from uuid import UUID, uuid7
 
 import pytest
 
@@ -10,7 +10,11 @@ from app.application.commands.groups.edit_message.handler import (
 )
 from app.application.commands.groups.send_message.command import SendGroupMessageCommand
 from app.application.exceptions.groups import InvalidGroupCasRetryAttemptsError
-from app.application.ports.persistence.models import GroupMutation, GroupSnapshot
+from app.application.ports.persistence.models import (
+    GroupEditAcceptance,
+    GroupMutation,
+    GroupSnapshot,
+)
 from app.domain.aggregates.message import Message
 from app.domain.value_objects.message_send_key import MessageSendKey
 
@@ -20,6 +24,8 @@ class MessageEditingGroupsWrapper:
 
     def __init__(self, groups) -> None:
         self._groups = groups
+        self.edit_results = {}
+        self.lose_edit_response = False
 
     @property
     def current(self) -> GroupSnapshot:
@@ -57,6 +63,49 @@ class MessageEditingGroupsWrapper:
         return await self._groups.get_sent_message(
             dialog_id, send_key, at_revision=at_revision
         )
+
+    async def get_edit_result(self, dialog_id, command_id, *, at_revision):
+        from app.application.exceptions.groups import GroupReadConflictError
+
+        if self.current.revision != at_revision:
+            raise GroupReadConflictError()
+        return self.edit_results.get((dialog_id, command_id))
+
+    async def try_commit_edit(self, expected, candidate, *, command_id, intent, result):
+        from app.application.exceptions.dependencies import StorageUnavailableError
+
+        async with self._groups.lock:
+            key = (expected.dialog.id, command_id)
+            if (
+                self.force_conflict
+                or expected.revision != self.current.revision
+                or key in self.edit_results
+            ):
+                return False
+            if candidate is not None:
+                existing = self.messages.get(candidate.id)
+                if (
+                    existing is None
+                    or candidate.version != existing.version + 1
+                    or candidate.dialog_id != existing.dialog_id
+                    or candidate.sender_id != existing.sender_id
+                    or candidate.client_message_id != existing.client_message_id
+                    or candidate.position != existing.position
+                    or candidate.created_at != existing.created_at
+                    or candidate.content.attachments != existing.content.attachments
+                ):
+                    return False
+                self.messages[candidate.id] = candidate.model_copy(deep=True)
+            self.edit_results[key] = GroupEditAcceptance(intent=intent, result=result)
+            self._groups.current = GroupSnapshot(
+                dialog=self.current.dialog,
+                revision=self.current.revision + 1,
+                last_position=self.current.last_position,
+            )
+            if self.lose_edit_response:
+                self.lose_edit_response = False
+                raise StorageUnavailableError("Edit committed; response was lost")
+            return True
 
     async def try_commit(
         self, expected: GroupSnapshot, mutation: GroupMutation, *, command_id: UUID
@@ -520,3 +569,216 @@ def test_edit_group_message_handler_validates_max_attempts(
         EditGroupMessageTextHandler(
             groups=editing_groups, clock=clock.now, max_attempts=0
         )
+
+
+@pytest.mark.asyncio
+async def test_late_edit_retry_returns_old_result_without_overwriting_new_text(
+    editing_groups, send_message, clock, group_id, bob_id
+):
+    sent = await send_message(
+        SendGroupMessageCommand(
+            dialog_id=group_id,
+            actor_id=bob_id,
+            client_message_id=uuid7(),
+            text="A",
+        )
+    )
+    edit = EditGroupMessageTextHandler(groups=editing_groups, clock=clock.now)
+    first_command = EditGroupMessageTextCommand(
+        dialog_id=group_id,
+        actor_id=bob_id,
+        message_id=sent.message.id,
+        command_id=uuid7(),
+        new_text="B",
+    )
+    first = await edit(first_command)
+    latest = await edit(
+        EditGroupMessageTextCommand(
+            dialog_id=group_id,
+            actor_id=bob_id,
+            message_id=sent.message.id,
+            command_id=uuid7(),
+            new_text="C",
+        )
+    )
+
+    replay = await edit(first_command)
+
+    assert replay == first
+    stored = await editing_groups.get_message_by_id(
+        group_id,
+        sent.message.id,
+        at_revision=editing_groups.current.revision,
+    )
+    assert stored.text_value == "C"
+    assert stored.version == latest.message.version == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changed", ["actor", "message", "text"])
+async def test_edit_command_id_rejects_another_intent(
+    editing_groups, send_message, clock, group_id, alice_id, bob_id, changed
+):
+    from app.application.exceptions.groups import MessageEditConflictError
+
+    sent = await send_message(
+        SendGroupMessageCommand(
+            dialog_id=group_id,
+            actor_id=bob_id,
+            client_message_id=uuid7(),
+            text="A",
+        )
+    )
+    edit = EditGroupMessageTextHandler(groups=editing_groups, clock=clock.now)
+    command = EditGroupMessageTextCommand(
+        dialog_id=group_id,
+        actor_id=bob_id,
+        message_id=sent.message.id,
+        command_id=uuid7(),
+        new_text="B",
+    )
+    accepted = await edit(command)
+    change = {
+        "actor": {"actor_id": alice_id},
+        "message": {"message_id": uuid7()},
+        "text": {"new_text": "Different intent"},
+    }[changed]
+    with pytest.raises(MessageEditConflictError):
+        await edit(EditGroupMessageTextCommand(**(command.model_dump() | change)))
+    assert await edit(command) == accepted
+
+
+@pytest.mark.asyncio
+async def test_lost_edit_commit_response_does_not_cancel_later_edit(
+    editing_groups, send_message, clock, group_id, bob_id
+):
+    from app.application.exceptions.dependencies import StorageUnavailableError
+
+    sent = await send_message(
+        SendGroupMessageCommand(
+            dialog_id=group_id,
+            actor_id=bob_id,
+            client_message_id=uuid7(),
+            text="A",
+        )
+    )
+    edit = EditGroupMessageTextHandler(groups=editing_groups, clock=clock.now)
+    command = EditGroupMessageTextCommand(
+        dialog_id=group_id,
+        actor_id=bob_id,
+        message_id=sent.message.id,
+        command_id=uuid7(),
+        new_text="B",
+    )
+    editing_groups.lose_edit_response = True
+    with pytest.raises(StorageUnavailableError):
+        await edit(command)
+    latest = await edit(
+        EditGroupMessageTextCommand(
+            dialog_id=group_id,
+            actor_id=bob_id,
+            message_id=sent.message.id,
+            command_id=uuid7(),
+            new_text="C",
+        )
+    )
+    replay = await edit(command)
+
+    assert replay.message.text == "B" and replay.message.version == 2
+    stored = await editing_groups.get_message_by_id(
+        group_id,
+        sent.message.id,
+        at_revision=editing_groups.current.revision,
+    )
+    assert stored.text_value == "C" and stored.version == latest.message.version == 3
+
+
+@pytest.mark.asyncio
+async def test_replayed_noop_keeps_original_result_and_does_not_undo_later_edit(
+    editing_groups, send_message, clock, group_id, bob_id
+):
+    sent = await send_message(
+        SendGroupMessageCommand(
+            dialog_id=group_id,
+            actor_id=bob_id,
+            client_message_id=uuid7(),
+            text="A",
+        )
+    )
+    edit = EditGroupMessageTextHandler(groups=editing_groups, clock=clock.now)
+    command = EditGroupMessageTextCommand(
+        dialog_id=group_id,
+        actor_id=bob_id,
+        message_id=sent.message.id,
+        command_id=uuid7(),
+        new_text=" A ",
+    )
+    noop = await edit(command)
+    assert noop.changed is False
+    await edit(
+        EditGroupMessageTextCommand(
+            dialog_id=group_id,
+            actor_id=bob_id,
+            message_id=sent.message.id,
+            command_id=uuid7(),
+            new_text="B",
+        )
+    )
+    assert await edit(command) == noop
+    stored = await editing_groups.get_message_by_id(
+        group_id,
+        sent.message.id,
+        at_revision=editing_groups.current.revision,
+    )
+    assert stored.text_value == "B" and stored.version == 2
+
+
+@pytest.mark.asyncio
+async def test_accepted_edit_replay_is_fenced_against_concurrent_member_removal(
+    groups,
+    editing_groups,
+    send_message,
+    remove_member,
+    clock,
+    group_id,
+    alice_id,
+    bob_id,
+):
+    import asyncio
+
+    from app.application.commands.groups.remove_member.command import (
+        RemoveGroupMemberCommand,
+    )
+    from app.domain.exceptions.groups import NotGroupMemberError
+
+    sent = await send_message(
+        SendGroupMessageCommand(
+            dialog_id=group_id,
+            actor_id=bob_id,
+            client_message_id=uuid7(),
+            text="A",
+        )
+    )
+    edit = EditGroupMessageTextHandler(groups=editing_groups, clock=clock.now)
+    command = EditGroupMessageTextCommand(
+        dialog_id=group_id,
+        actor_id=bob_id,
+        message_id=sent.message.id,
+        command_id=uuid7(),
+        new_text="B",
+    )
+    await edit(command)
+    groups.pause_type = type(None)
+    replay = asyncio.create_task(edit(command))
+    await groups.entered.wait()
+    await remove_member(
+        RemoveGroupMemberCommand(
+            dialog_id=group_id,
+            actor_id=alice_id,
+            user_id=bob_id,
+            command_id=uuid7(),
+        )
+    )
+    groups.resume.set()
+    with pytest.raises(NotGroupMemberError):
+        await replay

@@ -3,6 +3,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from app.application.dto.groups import GroupDialogDTO
+from app.application.dto.messages import EditGroupMessageTextResult
 from app.domain.aggregates.direct_dialog import DirectDialog
 from app.domain.aggregates.group_dialog import GroupDialog
 from app.domain.aggregates.message import Message
@@ -25,6 +26,34 @@ class GroupSnapshot:
     dialog: GroupDialog
     revision: int
     last_position: int
+
+
+@dataclass(frozen=True)
+class GroupCreationIntent:
+    actor_id: UUID
+    title: GroupTitle
+    member_ids: frozenset[UUID]
+    avatar_object_id: UUID | None
+
+
+@dataclass(frozen=True)
+class GroupCreationAcceptance:
+    intent: GroupCreationIntent
+    result: GroupDialogDTO
+
+
+@dataclass(frozen=True)
+class GroupEditIntent:
+    dialog_id: UUID
+    actor_id: UUID
+    message_id: UUID
+    new_text: str | None
+
+
+@dataclass(frozen=True)
+class GroupEditAcceptance:
+    intent: GroupEditIntent
+    result: EditGroupMessageTextResult
 
 
 type GroupMutation = GroupDialog | Message | ReceiptWatermark | None

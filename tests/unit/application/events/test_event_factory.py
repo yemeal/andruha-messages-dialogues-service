@@ -42,7 +42,7 @@ def test_factory_creates_message_persisted_outbox_message(
     )
 
     assert outbox_msg.kind is OutboxKind.EVENT
-    assert outbox_msg.topic == "messages.events"
+    assert outbox_msg.topic == "messaging.events.v1"
     assert outbox_msg.key == str(sample_message.sender_id)
     assert outbox_msg.type == "message.persisted.v1"
     assert outbox_msg.status is OutboxStatus.PENDING
@@ -78,7 +78,7 @@ def test_factory_creates_message_created_outbox_messages(
 
     for m in messages:
         assert m.kind is OutboxKind.EVENT
-        assert m.topic == "messages.events"
+        assert m.topic == "messaging.events.v1"
         assert m.type == "message.created.v1"
         assert m.status is OutboxStatus.PENDING
         assert m.payload["eventType"] == "message.created.v1"
@@ -104,7 +104,7 @@ def test_factory_creates_receipt_watermark_advanced_outbox_message() -> None:
     )
 
     assert outbox_msg.kind is OutboxKind.EVENT
-    assert outbox_msg.topic == "receipts.events"
+    assert outbox_msg.topic == "messaging.events.v1"
     assert outbox_msg.key == str(author_id)
     assert outbox_msg.type == "receipt.watermark_advanced.v1"
     assert outbox_msg.payload["payload"]["statusVersion"] == 3
@@ -127,7 +127,7 @@ def test_factory_creates_message_rejected_outbox_message() -> None:
     )
 
     assert outbox_msg.kind is OutboxKind.EVENT
-    assert outbox_msg.topic == "messages.events"
+    assert outbox_msg.topic == "messaging.events.v1"
     assert outbox_msg.key == str(target_user_id)
     assert outbox_msg.type == "message.rejected.v1"
     assert outbox_msg.payload["payload"]["code"] == "message.send_conflict"

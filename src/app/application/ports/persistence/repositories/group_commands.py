@@ -1,7 +1,12 @@
 from typing import Protocol
 from uuid import UUID
 
+from app.application.dto.messages import EditGroupMessageTextResult
 from app.application.ports.persistence.models import (
+    GroupCreationAcceptance,
+    GroupCreationIntent,
+    GroupEditAcceptance,
+    GroupEditIntent,
     GroupMembershipAcceptance,
     GroupMembershipIntent,
     GroupMetadataAcceptance,
@@ -20,8 +25,25 @@ from app.domain.value_objects.message_send_key import MessageSendKey
 class GroupCreationRepositoryProtocol(Protocol):
     """Создание начального канонического состояния группы."""
 
-    async def create_group(self, group: GroupDialog) -> None:
-        """Сохраняет новую группу с revision=1, last_position=0."""
+    async def get_creation_result(
+        self, command_id: UUID
+    ) -> GroupCreationAcceptance | None:
+        """Read immutable acceptance by the globally unique create operation ID."""
+        ...
+
+    async def create_or_get_group(
+        self, group: GroupDialog, *, command_id: UUID, intent: GroupCreationIntent
+    ) -> GroupCreationAcceptance:
+        """Atomically save canonical revision=1 and creation intent/result.
+
+        group.id equals command_id: the initial state and acceptance belong to
+        one Cassandra partition. Return the saved winner on concurrent retry.
+        Unknown outcomes must be resolved by acceptance or raised as unavailable.
+        """
+        ...
+
+    async def get_by_id(self, dialog_id: UUID) -> GroupSnapshot | None:
+        """Read current membership for projection repair; do not replay old state."""
         ...
 
 
@@ -139,6 +161,37 @@ class GroupMessageRepositoryProtocol(GroupCommitRepositoryProtocol, Protocol):
         ...
 
 
+class GroupEditRepositoryProtocol(GroupCommitRepositoryProtocol, Protocol):
+    async def get_message_by_id(
+        self, dialog_id: UUID, message_id: UUID, *, at_revision: int
+    ) -> Message | None: ...
+
+    async def get_edit_result(
+        self, dialog_id: UUID, command_id: UUID, *, at_revision: int
+    ) -> GroupEditAcceptance | None:
+        """Read immutable command intent/result at a confirmed revision."""
+        ...
+
+    async def try_commit_edit(
+        self,
+        expected: GroupSnapshot,
+        candidate: Message | None,
+        *,
+        command_id: UUID,
+        intent: GroupEditIntent,
+        result: EditGroupMessageTextResult,
+    ) -> bool:
+        """Atomically bind edit/no-op, revision and immutable command result.
+
+        A previously accepted command ID returns False without writes; the
+        handler reloads its saved result. Unknown outcomes are resolved from
+        that record or raised as StorageUnavailableError, never False.
+        Replay uses try_commit(None) to fence current membership without
+        replacing the saved result or changing message version/edit time.
+        """
+        ...
+
+
 class GroupMetadataRepositoryProtocol(GroupRevisionRepositoryProtocol, Protocol):
     async def get_metadata_result(
         self, dialog_id: UUID, command_id: UUID, *, at_revision: int
@@ -183,6 +236,7 @@ class GroupCommandRepositoryProtocol(
     GroupOwnershipRepositoryProtocol,
     GroupMetadataRepositoryProtocol,
     GroupMessageRepositoryProtocol,
+    GroupEditRepositoryProtocol,
     GroupReceiptRepositoryProtocol,
     Protocol,
 ):

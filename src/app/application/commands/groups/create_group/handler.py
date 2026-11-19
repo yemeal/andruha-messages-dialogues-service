@@ -7,9 +7,11 @@ from app.application.commands.groups.create_group.command import (
     CreateGroupDialogCommand,
 )
 from app.application.commands.groups.create_group.result import CreateGroupDialogResult
-from app.application.dto.groups import GroupDialogDTO
+from app.application.exceptions.dependencies import StorageUnavailableError
+from app.application.exceptions.groups import GroupCreationConflictError
 from app.application.ports.identity.registered_users import RegisteredUsersProtocol
 from app.application.ports.objects.attachments import AttachmentVerifierProtocol
+from app.application.ports.persistence.models import GroupCreationIntent
 from app.application.ports.persistence.repositories.group_commands import (
     GroupCreationRepositoryProtocol,
 )
@@ -29,14 +31,12 @@ class CreateGroupDialogHandler:
         registered_users: RegisteredUsersProtocol,
         attachments: AttachmentVerifierProtocol,
         clock: Callable[[], datetime],
-        ids: Callable[[], UUID],
     ) -> None:
         self._groups = groups
         self._projections = projections
         self._registered_users = registered_users
         self._attachments = attachments
         self._clock = clock
-        self._ids = ids
 
     async def __call__(
         self, command: CreateGroupDialogCommand
@@ -55,37 +55,43 @@ class CreateGroupDialogHandler:
             if member_id != command.actor_id and member_id not in ordered_members:
                 ordered_members.append(member_id)
 
-        # 4. Проверка регистрации каждого участника в Identity через require_registered
-        for user_id in ordered_members:
-            await self._registered_users.require_registered(user_id)
-
-        # 5. Проверка аватара при наличии
-        if command.avatar_object_id is not None:
-            await self._attachments.require_ready(
-                command.actor_id, (ObjectId.from_uuid(command.avatar_object_id),)
-            )
-
-        # 6. Создание агрегата
-        group = GroupDialog.create(
+        intent = GroupCreationIntent(
+            actor_id=command.actor_id,
             title=title,
-            owner_id=command.actor_id,
-            dialog_id=self._ids(),
-            initial_members=command.initial_member_ids,
+            member_ids=frozenset(unique_members),
             avatar_object_id=command.avatar_object_id,
-            now=self._clock(),
         )
+        accepted = await self._groups.get_creation_result(command.command_id)
+        if accepted is None:
+            await self._registered_users.require_registered_many(tuple(ordered_members))
+            if command.avatar_object_id is not None:
+                await self._attachments.require_ready(
+                    command.actor_id, (ObjectId.from_uuid(command.avatar_object_id),)
+                )
+            candidate = GroupDialog.create(
+                title=title,
+                owner_id=command.actor_id,
+                dialog_id=command.command_id,
+                initial_members=command.initial_member_ids,
+                avatar_object_id=command.avatar_object_id,
+                now=self._clock(),
+            )
+            accepted = await self._groups.create_or_get_group(
+                candidate, command_id=command.command_id, intent=intent
+            )
+        if accepted.intent != intent:
+            raise GroupCreationConflictError("Create operation intent conflicts")
 
-        # 7. Сохранение группы
-        await self._groups.create_group(group)
-
-        # 8. Обеспечение проекций: создатель строго первым, затем остальные участники
+        snapshot = await self._groups.get_by_id(accepted.result.id)
+        if snapshot is None:
+            raise StorageUnavailableError("Accepted group is not available")
+        group = snapshot.dialog
         projection_users = (
-            command.actor_id,
-            *(uid for uid in sorted(group.members) if uid != command.actor_id),
+            group.owner_id,
+            *(uid for uid in sorted(group.members) if uid != group.owner_id),
         )
         await ensure_dialog_projections(self._projections, group, projection_users)
 
-        # 9. Результат
         return CreateGroupDialogResult(
-            dialog=GroupDialogDTO.from_domain(group),
+            dialog=accepted.result,
         )

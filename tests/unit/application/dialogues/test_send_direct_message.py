@@ -22,6 +22,8 @@ from app.domain.aggregates.message import Message
 from app.domain.value_objects.direct_participants import DirectParticipants
 from app.domain.value_objects.message_send_key import MessageSendKey
 
+SEND_TIME = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
+
 
 class InMemoryDirectDialogRepository(DirectDialogRepositoryProtocol):
     def __init__(self) -> None:
@@ -115,12 +117,11 @@ def handler(
     message_repo: InMemoryDirectMessageRepository,
     attachment_verifier: DummyAttachmentVerifier,
 ) -> SendDirectMessageHandler:
-    now = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
     return SendDirectMessageHandler(
         direct_dialogs=direct_repo,
         direct_messages=message_repo,
         attachments=attachment_verifier,
-        clock=lambda: now,
+        clock=lambda: SEND_TIME,
         ids=uuid7,
     )
 
@@ -150,7 +151,7 @@ async def test_send_direct_message_not_participant(
     from app.domain.exceptions.dialogues import NotDialogParticipantError
 
     participants = DirectParticipants.from_user_ids(alice_id, bob_id)
-    dialog = DirectDialog.create(participants=participants)
+    dialog = DirectDialog.create(participants=participants, now=SEND_TIME)
     await direct_repo.create_or_get(dialog)
 
     charlie_id = UUID("00000000-0000-4000-8000-000000000003")
@@ -173,7 +174,7 @@ async def test_send_direct_message_success_monotone_positions(
     bob_id: UUID,
 ) -> None:
     participants = DirectParticipants.from_user_ids(alice_id, bob_id)
-    dialog = DirectDialog.create(participants=participants)
+    dialog = DirectDialog.create(participants=participants, now=SEND_TIME)
     await direct_repo.create_or_get(dialog)
 
     cmd1 = SendDirectMessageCommand(
@@ -211,7 +212,7 @@ async def test_send_direct_message_with_attachments(
     bob_id: UUID,
 ) -> None:
     participants = DirectParticipants.from_user_ids(alice_id, bob_id)
-    dialog = DirectDialog.create(participants=participants)
+    dialog = DirectDialog.create(participants=participants, now=SEND_TIME)
     await direct_repo.create_or_get(dialog)
 
     att_id = uuid7()
@@ -241,7 +242,7 @@ async def test_send_direct_message_idempotent_replay(
     bob_id: UUID,
 ) -> None:
     participants = DirectParticipants.from_user_ids(alice_id, bob_id)
-    dialog = DirectDialog.create(participants=participants)
+    dialog = DirectDialog.create(participants=participants, now=SEND_TIME)
     await direct_repo.create_or_get(dialog)
 
     client_id = uuid7()
@@ -268,7 +269,7 @@ async def test_send_direct_message_send_conflict_raises_error(
     from app.application.exceptions.groups import MessageSendConflictError
 
     participants = DirectParticipants.from_user_ids(alice_id, bob_id)
-    dialog = DirectDialog.create(participants=participants)
+    dialog = DirectDialog.create(participants=participants, now=SEND_TIME)
     await direct_repo.create_or_get(dialog)
 
     client_id = uuid7()
@@ -299,7 +300,7 @@ async def test_send_direct_message_replay_after_edit(
     bob_id: UUID,
 ) -> None:
     participants = DirectParticipants.from_user_ids(alice_id, bob_id)
-    dialog = DirectDialog.create(participants=participants)
+    dialog = DirectDialog.create(participants=participants, now=SEND_TIME)
     await direct_repo.create_or_get(dialog)
 
     client_id = uuid7()

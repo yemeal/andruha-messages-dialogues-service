@@ -14,6 +14,8 @@ from app.application.exceptions.dependencies import (
 )
 from app.application.exceptions.groups import GroupReadConflictError
 from app.application.ports.persistence.models import (
+    GroupCreationAcceptance,
+    GroupCreationIntent,
     GroupMembershipAcceptance,
     GroupMembershipIntent,
     GroupMetadataAcceptance,
@@ -262,9 +264,34 @@ class ReadyAttachments:
 class FakeGroupCreationRepository:
     def __init__(self, groups: dict[UUID, GroupDialog] | None = None) -> None:
         self.groups: dict[UUID, GroupDialog] = groups or {}
+        self.creations: dict[UUID, GroupCreationAcceptance] = {}
+        self.lose_create_response = False
 
-    async def create_group(self, group: GroupDialog) -> None:
+    async def get_creation_result(
+        self, command_id: UUID
+    ) -> GroupCreationAcceptance | None:
+        return self.creations.get(command_id)
+
+    async def create_or_get_group(
+        self, group: GroupDialog, *, command_id: UUID, intent: GroupCreationIntent
+    ) -> GroupCreationAcceptance:
+        if command_id in self.creations:
+            return self.creations[command_id]
+        accepted = GroupCreationAcceptance(intent, GroupDialogDTO.from_domain(group))
         self.groups[group.id] = group.model_copy(deep=True)
+        self.creations[command_id] = accepted
+        if self.lose_create_response:
+            self.lose_create_response = False
+            raise StorageUnavailableError("Create committed; response was lost")
+        return accepted
+
+    async def get_by_id(self, dialog_id: UUID) -> GroupSnapshot | None:
+        group = self.groups.get(dialog_id)
+        return (
+            GroupSnapshot(group.model_copy(deep=True), revision=1, last_position=0)
+            if group is not None
+            else None
+        )
 
 
 class FakeAttachmentVerifier:

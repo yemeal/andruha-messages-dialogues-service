@@ -14,17 +14,19 @@ from app.application.exceptions.groups import (
     DialogNotFoundError,
     GroupReadConflictError,
     InvalidGroupCasRetryAttemptsError,
+    MessageEditConflictError,
     MessageNotFoundError,
 )
+from app.application.ports.persistence.models import GroupEditIntent
 from app.application.ports.persistence.repositories.group_commands import (
-    GroupMessageRepositoryProtocol,
+    GroupEditRepositoryProtocol,
 )
 
 
 class EditGroupMessageTextHandler:
     def __init__(
         self,
-        groups: GroupMessageRepositoryProtocol,
+        groups: GroupEditRepositoryProtocol,
         clock: Callable[[], datetime],
         *,
         max_attempts: int = MAX_GROUP_COMMAND_ATTEMPTS,
@@ -38,6 +40,12 @@ class EditGroupMessageTextHandler:
     async def __call__(
         self, command: EditGroupMessageTextCommand
     ) -> EditGroupMessageTextResult:
+        intent = GroupEditIntent(
+            dialog_id=command.dialog_id,
+            actor_id=command.actor_id,
+            message_id=command.message_id,
+            new_text=command.new_text,
+        )
         for _ in range(self._max_attempts):
             snapshot = await self._groups.get_by_id(command.dialog_id)
             if snapshot is None:
@@ -46,6 +54,19 @@ class EditGroupMessageTextHandler:
             snapshot.dialog.require_can_read(command.actor_id)
 
             try:
+                accepted = await self._groups.get_edit_result(
+                    command.dialog_id, command.command_id, at_revision=snapshot.revision
+                )
+                if accepted is not None:
+                    if accepted.intent != intent:
+                        raise MessageEditConflictError(
+                            "Edit operation intent conflicts"
+                        )
+                    if await self._groups.try_commit(
+                        snapshot, None, command_id=command.command_id
+                    ):
+                        return accepted.result
+                    continue
                 message = await self._groups.get_message_by_id(
                     command.dialog_id,
                     command.message_id,
@@ -64,13 +85,18 @@ class EditGroupMessageTextHandler:
                 now=self._clock(),
             )
 
-            if await self._groups.try_commit(
-                snapshot, candidate if changed else None, command_id=command.command_id
+            result = EditGroupMessageTextResult(
+                message=MessageDTO.from_domain(candidate),
+                group_version=snapshot.dialog.version,
+                changed=changed,
+            )
+            if await self._groups.try_commit_edit(
+                snapshot,
+                candidate if changed else None,
+                command_id=command.command_id,
+                intent=intent,
+                result=result,
             ):
-                return EditGroupMessageTextResult(
-                    message=MessageDTO.from_domain(candidate),
-                    group_version=snapshot.dialog.version,
-                    changed=changed,
-                )
+                return result
 
         raise ConcurrentModificationError("Group message edit revision kept changing")

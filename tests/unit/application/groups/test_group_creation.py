@@ -45,10 +45,10 @@ async def test_create_group_dialog_success(
         registered_users=registered_users,
         attachments=attachments,
         clock=clock.now,
-        ids=ids.new_id,
     )
 
     command = CreateGroupDialogCommand(
+        command_id=UUID("01995140-0000-7000-8000-000000001001"),
         actor_id=alice_id,
         title="Команда Проекта",
         initial_member_ids=(bob_id, charlie_id),
@@ -99,12 +99,12 @@ async def test_create_group_requires_actor_registered(
         registered_users=registered_users,
         attachments=attachments,
         clock=clock.now,
-        ids=ids.new_id,
     )
 
     with pytest.raises(UserNotRegisteredError) as exc_info:
         await handler(
             CreateGroupDialogCommand(
+                command_id=UUID("01995140-0000-7000-8000-000000001001"),
                 actor_id=alice_id,
                 title="Рабочая группа",
                 initial_member_ids=(bob_id,),
@@ -135,12 +135,12 @@ async def test_create_group_requires_initial_members_registered(
         registered_users=registered_users,
         attachments=attachments,
         clock=clock.now,
-        ids=ids.new_id,
     )
 
     with pytest.raises(UserNotRegisteredError) as exc_info:
         await handler(
             CreateGroupDialogCommand(
+                command_id=UUID("01995140-0000-7000-8000-000000001001"),
                 actor_id=alice_id,
                 title="Рабочая группа",
                 initial_member_ids=(bob_id,),
@@ -172,13 +172,13 @@ async def test_create_group_requires_avatar_ready(
         projections=group_projections,
         registered_users=registered_users,
         clock=clock.now,
-        ids=ids.new_id,
         attachments=attachments,
     )
 
     with pytest.raises(StorageUnavailableError, match="not ready"):
         await handler(
             CreateGroupDialogCommand(
+                command_id=UUID("01995140-0000-7000-8000-000000001001"),
                 actor_id=alice_id,
                 title="Рабочая группа",
                 initial_member_ids=(bob_id,),
@@ -210,12 +210,12 @@ async def test_create_group_projection_failure_keeps_group_persisted(
         registered_users=registered_users,
         attachments=attachments,
         clock=clock.now,
-        ids=ids.new_id,
     )
 
     with pytest.raises(DialogProjectionsIncompleteError) as exc_info:
         await handler(
             CreateGroupDialogCommand(
+                command_id=UUID("01995140-0000-7000-8000-000000001001"),
                 actor_id=alice_id,
                 title="Рабочая группа",
                 initial_member_ids=(bob_id,),
@@ -247,12 +247,12 @@ async def test_create_group_empty_or_invalid_title(
         registered_users=registered_users,
         attachments=attachments,
         clock=clock.now,
-        ids=ids.new_id,
     )
 
     with pytest.raises(InvalidGroupTitleError):
         await handler(
             CreateGroupDialogCommand(
+                command_id=UUID("01995140-0000-7000-8000-000000001001"),
                 actor_id=alice_id,
                 title="   ",
             )
@@ -285,12 +285,12 @@ async def test_create_group_exceeding_capacity_fails_before_checking_registratio
         registered_users=registered_users,
         attachments=attachments,
         clock=clock.now,
-        ids=ids.new_id,
     )
 
     with pytest.raises(GroupMemberLimitExceededError):
         await handler(
             CreateGroupDialogCommand(
+                command_id=UUID("01995140-0000-7000-8000-000000001001"),
                 actor_id=alice_id,
                 title="Огромная группа",
                 initial_member_ids=too_many_members,

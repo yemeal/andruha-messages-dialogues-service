@@ -34,3 +34,9 @@ class MessageDTO(BaseDTO):
             edited_at=message.edited_at,
             is_edited=message.is_edited,
         )
+
+
+class EditGroupMessageTextResult(BaseDTO):
+    message: MessageDTO
+    group_version: int
+    changed: bool

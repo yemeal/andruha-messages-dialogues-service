@@ -18,6 +18,10 @@ class RegisteredUsers:
         if user_id not in self.users:
             raise UserNotRegisteredError(user_id)
 
+    async def require_registered_many(self, user_ids: tuple[UUID, ...]) -> None:
+        for user_id in user_ids:
+            await self.require_registered(user_id)
+
 
 class DirectDialogs:
     def __init__(self) -> None:

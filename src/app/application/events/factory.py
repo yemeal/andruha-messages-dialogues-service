@@ -27,10 +27,12 @@ class EventFactory:
         clock: Callable[[], datetime] = utc_now,
         ids: Callable[[], UUID] = uuid7,
         producer: str = "andruha-messages-dialogues-service",
+        topic: str = "messaging.events.v1",
     ) -> None:
         self._clock = clock
         self._ids = ids
         self._producer = producer
+        self._topic = topic
 
     def create_message_persisted(
         self,
@@ -66,9 +68,9 @@ class EventFactory:
             payload=payload,
         )
         return OutboxMessage(
-            id=self._ids(),
+            id=envelope.event_id,
             kind=OutboxKind.EVENT,
-            topic="messages.events",
+            topic=self._topic,
             key=str(message.sender_id),
             type="message.persisted.v1",
             payload=envelope.model_dump(mode="json", by_alias=True),
@@ -114,9 +116,9 @@ class EventFactory:
             )
             events.append(
                 OutboxMessage(
-                    id=self._ids(),
+                    id=envelope.event_id,
                     kind=OutboxKind.EVENT,
-                    topic="messages.events",
+                    topic=self._topic,
                     key=str(recipient_id),
                     type="message.created.v1",
                     payload=envelope.model_dump(mode="json", by_alias=True),
@@ -160,9 +162,9 @@ class EventFactory:
             payload=payload,
         )
         return OutboxMessage(
-            id=self._ids(),
+            id=envelope.event_id,
             kind=OutboxKind.EVENT,
-            topic="receipts.events",
+            topic=self._topic,
             key=str(target_user_id),
             type="receipt.watermark_advanced.v1",
             payload=envelope.model_dump(mode="json", by_alias=True),
@@ -200,9 +202,9 @@ class EventFactory:
             payload=payload,
         )
         return OutboxMessage(
-            id=self._ids(),
+            id=envelope.event_id,
             kind=OutboxKind.EVENT,
-            topic="messages.events",
+            topic=self._topic,
             key=str(target_user_id),
             type="message.rejected.v1",
             payload=envelope.model_dump(mode="json", by_alias=True),

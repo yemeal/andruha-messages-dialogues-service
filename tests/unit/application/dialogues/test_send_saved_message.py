@@ -21,6 +21,8 @@ from app.domain.aggregates.message import Message
 from app.domain.aggregates.saved_dialog import SavedDialog
 from app.domain.value_objects.message_send_key import MessageSendKey
 
+SEND_TIME = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
+
 
 class InMemorySavedDialogRepository(SavedDialogRepositoryProtocol):
     def __init__(self) -> None:
@@ -111,12 +113,11 @@ def handler(
     message_repo: InMemoryDirectMessageRepository,
     attachment_verifier: DummyAttachmentVerifier,
 ) -> SendSavedMessageHandler:
-    now = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
     return SendSavedMessageHandler(
         saved_dialogs=saved_repo,
         messages=message_repo,
         attachments=attachment_verifier,
-        clock=lambda: now,
+        clock=lambda: SEND_TIME,
         ids=uuid7,
     )
 
@@ -145,7 +146,7 @@ async def test_send_saved_message_not_owner(
 ) -> None:
     from app.domain.exceptions.dialogues import NotDialogParticipantError
 
-    dialog = SavedDialog.create(user_id=alice_id)
+    dialog = SavedDialog.create(user_id=alice_id, now=SEND_TIME)
     await saved_repo.create_or_get(dialog)
 
     cmd = SendSavedMessageCommand(
@@ -164,7 +165,7 @@ async def test_send_saved_message_success_monotone_positions(
     saved_repo: InMemorySavedDialogRepository,
     alice_id: UUID,
 ) -> None:
-    dialog = SavedDialog.create(user_id=alice_id)
+    dialog = SavedDialog.create(user_id=alice_id, now=SEND_TIME)
     await saved_repo.create_or_get(dialog)
 
     cmd1 = SendSavedMessageCommand(
@@ -200,7 +201,7 @@ async def test_send_saved_message_with_attachments(
 ) -> None:
     from app.domain.value_objects.object_id import ObjectId
 
-    dialog = SavedDialog.create(user_id=alice_id)
+    dialog = SavedDialog.create(user_id=alice_id, now=SEND_TIME)
     await saved_repo.create_or_get(dialog)
 
     att_id = uuid7()
@@ -228,7 +229,7 @@ async def test_send_saved_message_idempotent_replay_and_conflict(
 ) -> None:
     from app.application.exceptions.groups import MessageSendConflictError
 
-    dialog = SavedDialog.create(user_id=alice_id)
+    dialog = SavedDialog.create(user_id=alice_id, now=SEND_TIME)
     await saved_repo.create_or_get(dialog)
 
     client_id = uuid7()
@@ -259,5 +260,5 @@ async def test_saved_dialog_does_not_support_receipts(
     saved_repo: InMemorySavedDialogRepository,
     alice_id: UUID,
 ) -> None:
-    dialog = SavedDialog.create(user_id=alice_id)
+    dialog = SavedDialog.create(user_id=alice_id, now=SEND_TIME)
     assert dialog.supports_receipts is False

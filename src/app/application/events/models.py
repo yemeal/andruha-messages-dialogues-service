@@ -114,7 +114,9 @@ class EventEnvelope[PayloadT: BaseEventModel](BaseEventModel):
     occurred_at: datetime = Field(default_factory=utc_now)
     producer: str = Field(default="andruha-messages-dialogues-service")
     correlation_id: UUID = Field(default_factory=uuid7)
-    causation_id: UUID | None = None
+    causation_id: UUID | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     payload: PayloadT
 
     @model_validator(mode="after")
