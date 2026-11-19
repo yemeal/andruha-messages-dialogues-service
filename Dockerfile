@@ -34,6 +34,7 @@ RUN python -m pip uninstall --yes pip \
 WORKDIR /app
 COPY --from=builder /app/.venv ./.venv
 COPY src/ ./src/
+COPY cqltrack.yml ./
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
