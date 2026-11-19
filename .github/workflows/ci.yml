@@ -134,8 +134,23 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      cassandra:
+        image: cassandra:5.0.8-bookworm
+        env:
+          MAX_HEAP_SIZE: 512M
+          HEAP_NEWSIZE: 128M
+        ports:
+          - 9042:9042
+        options: >-
+          --health-cmd "cqlsh -e 'SELECT release_version FROM system.local'"
+          --health-interval 10s --health-timeout 10s
+          --health-start-period 40s --health-retries 15
+
     env:
       COVERAGE_FILE: .coverage.integration
+      MESSAGES_TEST_CASSANDRA_HOST: 127.0.0.1
+      MESSAGES_TEST_CASSANDRA_PORT: 9042
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -492,6 +507,9 @@ jobs:
             --output "${ready_body}" \
             http://127.0.0.1:18080/health/ready
           grep --quiet '"status":"ready"' "${ready_body}"
+
+      - name: Smoke-test async Cassandra migrations in the runtime image
+        run: python scripts/smoke_cassandra.py --image "${IMAGE_NAME}"
 
   # Required by the main branch ruleset.
   docker-summary:

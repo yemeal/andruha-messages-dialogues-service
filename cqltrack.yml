@@ -1,0 +1,12 @@
+cassandra:
+  contact_points: [127.0.0.1]
+  port: 9042
+  consistency: QUORUM
+  connect_timeout: 5
+  request_timeout: 5
+keyspace:
+  name: messages
+migrations:
+  directory: src/app/infrastructure/persistence/cassandra/schema
+schema:
+  agreement_wait: 30

@@ -17,8 +17,24 @@ class GroupReadConflictError(ApplicationError):
     """Данные нельзя прочитать на ожидаемой ревизии; нужна новая попытка."""
 
 
+class GroupCreationConflictError(ApplicationError):
+    """Create operation ID was already accepted with another intent."""
+
+
 class GroupMembershipConflictError(ApplicationError):
     """command_id команды состава уже принят с другим намерением."""
+
+
+class GroupMetadataConflictError(ApplicationError):
+    """command_id команды метаданных уже принят с другим намерением."""
+
+
+class GroupOwnershipConflictError(ApplicationError):
+    """command_id команды смены владельца уже принят с другим намерением."""
+
+
+class CannotTransferOwnershipToSelfError(ApplicationError):
+    """Попытка передать владение группой самому себе."""
 
 
 class MessageNotFoundError(ApplicationError):
@@ -29,3 +45,20 @@ class MessageNotFoundError(ApplicationError):
 
 class MessageSendConflictError(ApplicationError):
     """Ключ отправки конфликтует с неизменяемыми полями или исходным текстом."""
+
+
+class MessageEditConflictError(ApplicationError):
+    """Edit command ID was already accepted with another intent."""
+
+
+class InvalidGroupCasRetryAttemptsError(ApplicationError):
+    """Предел CAS-попыток повтора групповой команды должен быть >= 1."""
+
+    def __init__(self, max_attempts: int) -> None:
+        self.max_attempts = max_attempts
+        super().__init__(
+            f"Group command CAS retry attempts limit (max_attempts) must be positive, got {max_attempts}"
+        )
+
+
+InvalidGroupCommandMaxAttemptsError = InvalidGroupCasRetryAttemptsError

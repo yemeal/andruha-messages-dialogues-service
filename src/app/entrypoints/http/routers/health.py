@@ -16,6 +16,9 @@ async def ready(
     response: Response,
 ) -> dict[str, str]:
     is_ready = bool(getattr(request.app.state, "ready", False))
+    runtime = getattr(request.app.state, "messaging_runtime", None)
+    if is_ready and runtime is not None:
+        is_ready = await runtime.ready()
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 

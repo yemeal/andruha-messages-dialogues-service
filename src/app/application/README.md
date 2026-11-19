@@ -150,9 +150,11 @@ Handlers используют узкие клиентские `GroupMembershipRe
 Handler ACK копирует прочитанный watermark в отдельного валидированного
 кандидата, чтобы отказ записи не менял объект, принадлежащий репозиторию.
 
-Реальные Identity/Object Storage клиенты, Cassandra, схемы БД, HTTP/Kafka
-адаптеры и публикация sync/events остаются следующим этапом. Для будущего
-Cassandra adapter выбран [протокол одной условной записи](../../../docs/adr/0001-conditional-group-command-writes.md).
+Identity lookup, Cassandra Direct/Saved text persistence и HTTP history/list/sync
+подключены. Durable события сохранены, Kafka publisher/consumer и Object Storage
+остаются следующими этапами. Групповые send/edit/receipt adapters пока не подключены.
+Для общей атомарной границы выбран
+[протокол одной условной записи](../../../docs/adr/0001-conditional-group-command-writes.md).
 Он должен атомарно оставлять и материал для восстановления обязательных
 последующих эффектов; успешный вызов Python handler сам по себе этого не доказывает.
 

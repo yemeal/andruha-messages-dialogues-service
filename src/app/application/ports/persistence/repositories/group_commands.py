@@ -1,16 +1,50 @@
 from typing import Protocol
 from uuid import UUID
 
+from app.application.dto.messages import EditGroupMessageTextResult
 from app.application.ports.persistence.models import (
+    GroupCreationAcceptance,
+    GroupCreationIntent,
+    GroupEditAcceptance,
+    GroupEditIntent,
     GroupMembershipAcceptance,
     GroupMembershipIntent,
+    GroupMetadataAcceptance,
+    GroupMetadataIntent,
     GroupMutation,
+    GroupOwnershipAcceptance,
+    GroupOwnershipIntent,
     GroupSnapshot,
 )
 from app.domain.aggregates.group_dialog import GroupDialog
 from app.domain.aggregates.message import Message
 from app.domain.aggregates.receipt_watermark import ReceiptWatermark
 from app.domain.value_objects.message_send_key import MessageSendKey
+
+
+class GroupCreationRepositoryProtocol(Protocol):
+    """Создание начального канонического состояния группы."""
+
+    async def get_creation_result(
+        self, command_id: UUID
+    ) -> GroupCreationAcceptance | None:
+        """Read immutable acceptance by the globally unique create operation ID."""
+        ...
+
+    async def create_or_get_group(
+        self, group: GroupDialog, *, command_id: UUID, intent: GroupCreationIntent
+    ) -> GroupCreationAcceptance:
+        """Atomically save canonical revision=1 and creation intent/result.
+
+        group.id equals command_id: the initial state and acceptance belong to
+        one Cassandra partition. Return the saved winner on concurrent retry.
+        Unknown outcomes must be resolved by acceptance or raised as unavailable.
+        """
+        ...
+
+    async def get_by_id(self, dialog_id: UUID) -> GroupSnapshot | None:
+        """Read current membership for projection repair; do not replay old state."""
+        ...
 
 
 class GroupRevisionRepositoryProtocol(Protocol):
@@ -45,6 +79,10 @@ class GroupCommitRepositoryProtocol(GroupRevisionRepositoryProtocol, Protocol):
         Новое Message условно резервирует send key и ID, а позиция равна
         last_position + 1. Существующий ключ не создаёт новую запись даже
         при ошибочном отсутствии результата предварительного чтения.
+        Мутация Message с version > 1 (редактирование текста) проверяет
+        совпадение expected_message_version (версия в хранилище равна version - 1),
+        сохранение неизменных атрибутов отправки и увеличивает revision группы
+        без изменения last_position.
         ReceiptWatermark сохраняет ID, read/delivered не уменьшаются;
         версия кандидата следует непосредственно за сохранённой версией.
         Эти условия проверяются вместе с revision; нарушение даёт False
@@ -104,6 +142,12 @@ class GroupReceiptRepositoryProtocol(GroupCommitRepositoryProtocol, Protocol):
 
 
 class GroupMessageRepositoryProtocol(GroupCommitRepositoryProtocol, Protocol):
+    async def get_message_by_id(
+        self, dialog_id: UUID, message_id: UUID, *, at_revision: int
+    ) -> Message | None:
+        """Изолированное сообщение указанного диалога по ID на at_revision."""
+        ...
+
     async def get_sent_message(
         self, dialog_id: UUID, send_key: MessageSendKey, *, at_revision: int
     ) -> Message | None:
@@ -117,9 +161,82 @@ class GroupMessageRepositoryProtocol(GroupCommitRepositoryProtocol, Protocol):
         ...
 
 
+class GroupEditRepositoryProtocol(GroupCommitRepositoryProtocol, Protocol):
+    async def get_message_by_id(
+        self, dialog_id: UUID, message_id: UUID, *, at_revision: int
+    ) -> Message | None: ...
+
+    async def get_edit_result(
+        self, dialog_id: UUID, command_id: UUID, *, at_revision: int
+    ) -> GroupEditAcceptance | None:
+        """Read immutable command intent/result at a confirmed revision."""
+        ...
+
+    async def try_commit_edit(
+        self,
+        expected: GroupSnapshot,
+        candidate: Message | None,
+        *,
+        command_id: UUID,
+        intent: GroupEditIntent,
+        result: EditGroupMessageTextResult,
+    ) -> bool:
+        """Atomically bind edit/no-op, revision and immutable command result.
+
+        A previously accepted command ID returns False without writes; the
+        handler reloads its saved result. Unknown outcomes are resolved from
+        that record or raised as StorageUnavailableError, never False.
+        Replay uses try_commit(None) to fence current membership without
+        replacing the saved result or changing message version/edit time.
+        """
+        ...
+
+
+class GroupMetadataRepositoryProtocol(GroupRevisionRepositoryProtocol, Protocol):
+    async def get_metadata_result(
+        self, dialog_id: UUID, command_id: UUID, *, at_revision: int
+    ) -> GroupMetadataAcceptance | None:
+        """Результат команды метаданных на at_revision; отсутствие тоже согласовано."""
+        ...
+
+    async def try_commit_metadata(
+        self,
+        expected: GroupSnapshot,
+        candidate: GroupDialog,
+        *,
+        command_id: UUID,
+        intent: GroupMetadataIntent,
+    ) -> bool:
+        """Атомарная проверка ревизии, сохранение новой версии группы и результата команды."""
+        ...
+
+
+class GroupOwnershipRepositoryProtocol(GroupRevisionRepositoryProtocol, Protocol):
+    async def get_ownership_result(
+        self, dialog_id: UUID, command_id: UUID, *, at_revision: int
+    ) -> GroupOwnershipAcceptance | None:
+        """Результат команды передачи владения на at_revision; отсутствие тоже согласовано."""
+        ...
+
+    async def try_commit_ownership(
+        self,
+        expected: GroupSnapshot,
+        candidate: GroupDialog,
+        *,
+        command_id: UUID,
+        intent: GroupOwnershipIntent,
+    ) -> bool:
+        """Атомарная проверка ревизии, сохранение нового владельца группы и результата команды."""
+        ...
+
+
 class GroupCommandRepositoryProtocol(
+    GroupCreationRepositoryProtocol,
     GroupMembershipRepositoryProtocol,
+    GroupOwnershipRepositoryProtocol,
+    GroupMetadataRepositoryProtocol,
     GroupMessageRepositoryProtocol,
+    GroupEditRepositoryProtocol,
     GroupReceiptRepositoryProtocol,
     Protocol,
 ):

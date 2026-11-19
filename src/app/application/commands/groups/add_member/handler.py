@@ -9,6 +9,7 @@ from app.application.exceptions.groups import (
     DialogNotFoundError,
     GroupMembershipConflictError,
     GroupReadConflictError,
+    InvalidGroupCasRetryAttemptsError,
 )
 from app.application.ports.identity.registered_users import RegisteredUsersProtocol
 from app.application.ports.persistence.models import (
@@ -30,7 +31,7 @@ class AddGroupMemberHandler:
         max_attempts: int = MAX_GROUP_COMMAND_ATTEMPTS,
     ) -> None:
         if max_attempts < 1:
-            raise ValueError("max_attempts must be positive")
+            raise InvalidGroupCasRetryAttemptsError(max_attempts)
         self._groups = groups
         self._registered_users = registered_users
         self._clock = clock

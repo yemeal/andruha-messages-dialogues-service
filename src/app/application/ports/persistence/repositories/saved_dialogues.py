@@ -6,6 +6,8 @@ from app.domain.aggregates.saved_dialog import SavedDialog
 
 
 class SavedDialogRepositoryProtocol(Protocol):
+    async def get_by_id(self, dialog_id: UUID) -> SavedDialog | None: ...
+
     async def get_by_owner(self, user_id: UUID) -> SavedDialog | None: ...
 
     async def create_or_get(
